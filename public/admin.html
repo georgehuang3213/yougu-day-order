@@ -376,6 +376,122 @@
     </div>
   </div>
 
+  <!-- 菜單管理彈窗 -->
+  <div id="menuModal" class="fixed inset-0 z-50 bg-stone-900/80 backdrop-blur-sm hidden flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
+    <div class="bg-white rounded-2xl shadow-2xl border border-stone-200 w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden my-auto">
+      
+      <!-- Modal Header -->
+      <div class="p-4 sm:p-5 border-b border-stone-200 flex items-center justify-between bg-stone-50">
+        <div class="flex items-center space-x-2.5">
+          <div class="w-9 h-9 rounded-xl bg-emerald-800 text-white flex items-center justify-center text-base shadow-sm">
+            <i class="fas fa-utensils"></i>
+          </div>
+          <div>
+            <h3 class="font-bold text-base text-stone-900">優穀日・菜單與餐點品項管理</h3>
+            <p class="text-xs text-stone-500">自由新增、修改品項名稱、價格與說明，或隨時上下架（售完設定）</p>
+          </div>
+        </div>
+        <div class="flex items-center space-x-2">
+          <button onclick="openEditItemModal()" class="px-3 py-1.5 bg-emerald-800 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center space-x-1.5 transition shadow-sm">
+            <i class="fas fa-plus"></i>
+            <span>新增餐點</span>
+          </button>
+          <button onclick="resetDefaultMenu()" class="px-3 py-1.5 bg-stone-100 hover:bg-rose-50 text-stone-600 hover:text-rose-600 rounded-lg text-xs font-medium transition border border-stone-200" title="恢復原廠預設的6種優格碗與配料">
+            <i class="fas fa-undo"></i>
+            <span class="hidden sm:inline">恢復預設菜單</span>
+          </button>
+          <button onclick="closeMenuModal()" class="w-8 h-8 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-500 hover:text-stone-700 flex items-center justify-center transition">
+            <i class="fas fa-times text-sm"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Menu Category Tabs -->
+      <div class="px-4 sm:px-5 py-2.5 bg-stone-100/70 border-b border-stone-200 flex items-center justify-between text-xs">
+        <div class="flex items-center space-x-1.5">
+          <button onclick="filterAdminMenu('all')" id="amenu-tab-all" class="amenu-tab px-3 py-1 rounded-md font-bold bg-emerald-800 text-white shadow-xs">全部品項 (<span id="amenu-count-all">0</span>)</button>
+          <button onclick="filterAdminMenu('bowls')" id="amenu-tab-bowls" class="amenu-tab px-3 py-1 rounded-md font-medium bg-white text-stone-600 hover:bg-stone-200 border border-stone-200">🥣 優格碗 (<span id="amenu-count-bowls">0</span>)</button>
+          <button onclick="filterAdminMenu('addons')" id="amenu-tab-addons" class="amenu-tab px-3 py-1 rounded-md font-medium bg-white text-stone-600 hover:bg-stone-200 border border-stone-200">🌾 加購配料 (<span id="amenu-count-addons">0</span>)</button>
+        </div>
+        <span class="text-stone-400 text-[11px] hidden sm:inline">修改後儲存即同步更新至前台顧客手機</span>
+      </div>
+
+      <!-- Menu Items List -->
+      <div class="flex-1 overflow-y-auto p-4 sm:p-5">
+        <div id="adminMenuList" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <!-- Dynamic menu cards -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 新增/編輯餐點品項彈窗 -->
+  <div id="menuEditModal" class="fixed inset-0 z-50 bg-stone-900/80 backdrop-blur-sm hidden flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+    <div class="bg-white rounded-2xl shadow-2xl border border-stone-200 w-full max-w-md overflow-hidden my-auto animate-slide-up">
+      <div class="p-4 border-b border-stone-200 flex items-center justify-between bg-stone-50">
+        <h4 id="menuEditTitle" class="font-bold text-sm text-stone-800 flex items-center space-x-2">
+          <i class="fas fa-edit text-emerald-700"></i>
+          <span>編輯餐點品項</span>
+        </h4>
+        <button onclick="closeEditItemModal()" class="text-stone-400 hover:text-stone-600"><i class="fas fa-times"></i></button>
+      </div>
+      <form onsubmit="saveMenuItem(event)" class="p-5 space-y-3.5 text-xs text-left">
+        <input type="hidden" id="editItemId">
+        
+        <div>
+          <label class="block font-bold text-stone-700 mb-1">餐點品名 <span class="text-rose-500">*</span></label>
+          <input type="text" id="editItemName" required class="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-lg outline-none focus:ring-2 focus:ring-emerald-600" placeholder="例如：招牌自製藍莓燕麥優格碗">
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-bold text-stone-700 mb-1">餐點分類 <span class="text-rose-500">*</span></label>
+            <select id="editItemCategory" class="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-lg outline-none focus:ring-2 focus:ring-emerald-600">
+              <option value="bowls">🥣 優格碗系列</option>
+              <option value="addons">🌾 加購脆粒與果醬</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-bold text-stone-700 mb-1">售價 (NT$) <span class="text-rose-500">*</span></label>
+            <input type="number" id="editItemPrice" required min="0" class="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-lg outline-none focus:ring-2 focus:ring-emerald-600" placeholder="例如：130">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-bold text-stone-700 mb-1">行銷標籤 (可選)</label>
+            <input type="text" id="editItemTag" class="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-lg outline-none focus:ring-2 focus:ring-emerald-600" placeholder="例如：人氣招牌、運動首選">
+          </div>
+          <div>
+            <label class="block font-bold text-stone-700 mb-1">圖片路徑 / 網址</label>
+            <input type="text" id="editItemImage" class="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-lg outline-none focus:ring-2 focus:ring-emerald-600" placeholder="例如：images/hero.jpg">
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-bold text-stone-700 mb-1">餐點特色說明</label>
+          <textarea id="editItemDesc" rows="3" class="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-lg outline-none focus:ring-2 focus:ring-emerald-600" placeholder="例如：100% 無加糖鮮奶優格 ‧ 招牌手工自製藍莓果醬 ‧ 乾濕分離特製酥脆燕麥粒"></textarea>
+        </div>
+
+        <div class="pt-1">
+          <label class="flex items-center space-x-2 cursor-pointer">
+            <input type="checkbox" id="editItemAvailable" checked class="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500">
+            <span class="font-bold text-stone-700">目前供應中（上架）</span>
+          </label>
+          <p class="text-[11px] text-stone-400 ml-6">若未勾選，前台將顯示「已售完」且顧客無法點選加入購物車</p>
+        </div>
+
+        <div class="flex space-x-2 pt-3 border-t border-stone-200">
+          <button type="button" onclick="closeEditItemModal()" class="flex-1 py-2 bg-stone-100 hover:bg-stone-200 text-stone-600 rounded-lg font-bold transition">取消</button>
+          <button type="submit" id="saveMenuBtn" class="flex-1 py-2 bg-emerald-800 hover:bg-emerald-900 text-white rounded-lg font-bold shadow-md transition flex items-center justify-center space-x-1">
+            <i class="fas fa-check"></i>
+            <span>儲存並發布</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Header -->
   <header class="bg-emerald-900 text-white shadow-md sticky top-0 z-30">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between">
@@ -414,6 +530,12 @@
         <button onclick="openReportsModal()" class="flex items-center space-x-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-bold rounded-lg bg-amber-400 hover:bg-amber-300 text-stone-900 transition shadow-sm" title="開啟營收統計與銷售報表，支援紙本列印">
           <i class="fas fa-chart-pie text-emerald-950"></i>
           <span>營運報表</span>
+        </button>
+
+        <!-- Menu Management button -->
+        <button onclick="openMenuModal()" class="flex items-center space-x-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-bold rounded-lg bg-emerald-800 hover:bg-emerald-700 text-emerald-100 transition shadow-sm" title="編輯菜單品項、價格與上下架">
+          <i class="fas fa-utensils text-amber-300"></i>
+          <span class="hidden sm:inline">菜單管理</span>
         </button>
 
         <!-- Customer site link -->
@@ -521,11 +643,15 @@
         </button>
       </div>
 
-      <!-- Action buttons: Reports, Export CSV, Clear mock -->
+      <!-- Action buttons: Reports, Menu, Export CSV, Clear mock -->
       <div class="flex items-center space-x-2 self-end md:self-auto">
         <button onclick="openReportsModal()" class="px-3 py-1.5 bg-emerald-800 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center space-x-1.5 transition shadow-sm">
           <i class="fas fa-chart-pie"></i>
           <span>營運報表 / 列印</span>
+        </button>
+        <button onclick="openMenuModal()" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold flex items-center space-x-1.5 transition shadow-sm">
+          <i class="fas fa-utensils"></i>
+          <span>菜單管理</span>
         </button>
         <button onclick="exportCSV()" class="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-lg text-xs font-medium flex items-center space-x-1.5 transition">
           <i class="fas fa-file-excel text-emerald-700"></i>
@@ -1653,6 +1779,275 @@ ${order.notes || order.note ? `備註：${order.notes || order.note}\n` : ''}
       a.download = `優穀日_營運銷售報表_${periodName}.csv`;
       a.click();
       URL.revokeObjectURL(url);
+    }
+
+    // ==========================================
+    // 菜單與餐點管理邏輯 (Menu Management)
+    // ==========================================
+    let adminMenu = [];
+    let currentAdminMenuFilter = 'all';
+
+    async function openMenuModal() {
+      const modal = document.getElementById('menuModal');
+      if (modal) modal.classList.remove('hidden');
+      await fetchAdminMenu();
+    }
+
+    function closeMenuModal() {
+      const modal = document.getElementById('menuModal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    async function fetchAdminMenu() {
+      const container = document.getElementById('adminMenuList');
+      if (container) {
+        container.innerHTML = `<div class="col-span-full text-center py-10 text-stone-400"><i class="fas fa-spinner fa-spin mr-1"></i> 正在載入雲端菜單...</div>`;
+      }
+      try {
+        const res = await fetch('/api/menu');
+        if (res.ok) {
+          const data = await res.json();
+          if (data && Array.isArray(data.menu)) {
+            adminMenu = data.menu;
+            localStorage.setItem('yougu_menu', JSON.stringify(adminMenu));
+            renderAdminMenu();
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn('API menu fetch note:', err);
+      }
+
+      // Local fallback
+      try {
+        const local = localStorage.getItem('yougu_menu');
+        if (local) adminMenu = JSON.parse(local);
+      } catch (e) {}
+
+      renderAdminMenu();
+    }
+
+    function filterAdminMenu(cat) {
+      currentAdminMenuFilter = cat;
+      document.querySelectorAll('.amenu-tab').forEach(b => {
+        b.className = 'amenu-tab px-3 py-1 rounded-md font-medium bg-white text-stone-600 hover:bg-stone-200 border border-stone-200';
+      });
+      const active = document.getElementById(`amenu-tab-${cat}`);
+      if (active) active.className = 'amenu-tab px-3 py-1 rounded-md font-bold bg-emerald-800 text-white shadow-xs';
+      renderAdminMenu();
+    }
+
+    function renderAdminMenu() {
+      const container = document.getElementById('adminMenuList');
+      if (!container) return;
+
+      const countAll = adminMenu.length;
+      const countBowls = adminMenu.filter(m => m.category === 'bowls').length;
+      const countAddons = adminMenu.filter(m => m.category === 'addons').length;
+
+      const cAll = document.getElementById('amenu-count-all');
+      const cBowls = document.getElementById('amenu-count-bowls');
+      const cAddons = document.getElementById('amenu-count-addons');
+      if (cAll) cAll.innerText = countAll;
+      if (cBowls) cBowls.innerText = countBowls;
+      if (cAddons) cAddons.innerText = countAddons;
+
+      const filtered = adminMenu.filter(item => {
+        if (currentAdminMenuFilter === 'all') return true;
+        return item.category === currentAdminMenuFilter;
+      });
+
+      if (filtered.length === 0) {
+        container.innerHTML = `<div class="col-span-full text-center py-12 text-stone-400">目前此分類尚無餐點項目</div>`;
+        return;
+      }
+
+      container.innerHTML = filtered.map(item => {
+        const isAvail = (item.available !== false);
+        const catBadge = item.category === 'bowls' ? '<span class="bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded text-[10px] font-bold">🥣 優格碗</span>' : '<span class="bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded text-[10px] font-bold">🌾 加購配料</span>';
+        
+        return `
+          <div class="bg-stone-50 border ${isAvail ? 'border-stone-200' : 'border-rose-200 bg-rose-50/20'} rounded-xl p-3.5 flex space-x-3.5 transition">
+            <div class="w-20 h-20 rounded-lg overflow-hidden bg-stone-200 flex-shrink-0 relative">
+              <img src="${item.image || 'images/hero.jpg'}" alt="${escapeHtml(item.name)}" class="w-full h-full object-cover">
+              ${item.tag ? `<span class="absolute top-1 left-1 bg-stone-900/80 text-white text-[9px] font-bold px-1 py-0.2 rounded">${escapeHtml(item.tag)}</span>` : ''}
+              ${!isAvail ? `<span class="absolute inset-0 bg-stone-950/65 flex items-center justify-center text-white text-xs font-black">已下架</span>` : ''}
+            </div>
+            
+            <div class="flex-1 flex flex-col justify-between">
+              <div>
+                <div class="flex items-start justify-between gap-1">
+                  <h4 class="font-bold text-xs sm:text-sm text-stone-900 leading-tight">${escapeHtml(item.name)}</h4>
+                  <span class="font-black text-emerald-800 text-sm font-mono whitespace-nowrap">NT$ ${item.price}</span>
+                </div>
+                <div class="flex items-center space-x-1.5 mt-1">
+                  ${catBadge}
+                  <span class="text-[10px] ${isAvail ? 'text-emerald-700 font-bold' : 'text-rose-600 font-bold'}">
+                    ${isAvail ? '● 供應中' : '✕ 已售完下架'}
+                  </span>
+                </div>
+                <p class="text-[11px] text-stone-500 mt-1 line-clamp-2">${escapeHtml(item.desc || '')}</p>
+              </div>
+
+              <!-- Controls -->
+              <div class="flex items-center justify-between pt-2 border-t border-stone-200/80 mt-2">
+                <!-- Toggle Availability -->
+                <button onclick="toggleMenuItemAvailability('${item.id}')" class="px-2 py-1 rounded text-[11px] font-bold transition flex items-center space-x-1 ${isAvail ? 'bg-stone-200 hover:bg-rose-100 text-stone-700 hover:text-rose-700' : 'bg-emerald-100 hover:bg-emerald-200 text-emerald-800'}">
+                  <i class="fas ${isAvail ? 'fa-toggle-on text-emerald-600' : 'fa-toggle-off text-stone-400'}"></i>
+                  <span>${isAvail ? '設為售完' : '恢復上架'}</span>
+                </button>
+
+                <div class="flex items-center space-x-1.5">
+                  <button onclick="openEditItemModal('${item.id}')" class="px-2 py-1 bg-white hover:bg-stone-100 text-stone-700 border border-stone-200 rounded text-[11px] font-medium transition flex items-center space-x-1">
+                    <i class="fas fa-pen text-stone-400"></i>
+                    <span>編輯</span>
+                  </button>
+                  <button onclick="deleteMenuItem('${item.id}')" class="px-2 py-1 bg-white hover:bg-rose-50 text-rose-600 border border-stone-200 hover:border-rose-200 rounded text-[11px] font-medium transition flex items-center space-x-1" title="刪除此餐點">
+                    <i class="fas fa-trash-alt"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function openEditItemModal(itemId = null) {
+      const modal = document.getElementById('menuEditModal');
+      const title = document.getElementById('menuEditTitle');
+      const form = document.querySelector('#menuEditModal form');
+      if (form) form.reset();
+
+      if (itemId) {
+        const item = adminMenu.find(m => m.id === itemId);
+        if (!item) return;
+        title.innerHTML = `<i class="fas fa-pen text-emerald-700"></i><span>編輯餐點：${escapeHtml(item.name)}</span>`;
+        document.getElementById('editItemId').value = item.id;
+        document.getElementById('editItemName').value = item.name || '';
+        document.getElementById('editItemCategory').value = item.category || 'bowls';
+        document.getElementById('editItemPrice').value = item.price || 0;
+        document.getElementById('editItemTag').value = item.tag || '';
+        document.getElementById('editItemImage').value = item.image || '';
+        document.getElementById('editItemDesc').value = item.desc || '';
+        document.getElementById('editItemAvailable').checked = (item.available !== false);
+      } else {
+        title.innerHTML = `<i class="fas fa-plus text-emerald-700"></i><span>新增餐點品項</span>`;
+        document.getElementById('editItemId').value = '';
+        document.getElementById('editItemCategory').value = 'bowls';
+        document.getElementById('editItemAvailable').checked = true;
+        document.getElementById('editItemImage').value = 'images/hero.jpg';
+      }
+
+      modal.classList.remove('hidden');
+    }
+
+    function closeEditItemModal() {
+      const modal = document.getElementById('menuEditModal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    async function toggleMenuItemAvailability(itemId) {
+      const item = adminMenu.find(m => m.id === itemId);
+      if (!item) return;
+      item.available = (item.available === false) ? true : false;
+      await syncMenuToCloud();
+      renderAdminMenu();
+    }
+
+    async function saveMenuItem(event) {
+      event.preventDefault();
+      const id = document.getElementById('editItemId').value;
+      const name = document.getElementById('editItemName').value.trim();
+      const category = document.getElementById('editItemCategory').value;
+      const price = Number(document.getElementById('editItemPrice').value) || 0;
+      const tag = document.getElementById('editItemTag').value.trim();
+      const image = document.getElementById('editItemImage').value.trim() || 'images/hero.jpg';
+      const desc = document.getElementById('editItemDesc').value.trim();
+      const available = document.getElementById('editItemAvailable').checked;
+
+      if (!name) {
+        alert('請填寫餐點名稱！');
+        return;
+      }
+
+      const saveBtn = document.getElementById('saveMenuBtn');
+      if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> 儲存中...`;
+      }
+
+      if (id) {
+        // Edit existing
+        const idx = adminMenu.findIndex(m => m.id === id);
+        if (idx !== -1) {
+          adminMenu[idx] = { ...adminMenu[idx], name, category, price, tag, image, desc, available };
+        }
+      } else {
+        // Create new
+        const newId = `item_${Date.now()}`;
+        adminMenu.push({
+          id: newId,
+          name,
+          category,
+          price,
+          tag,
+          image,
+          desc,
+          available
+        });
+      }
+
+      await syncMenuToCloud();
+      closeEditItemModal();
+      renderAdminMenu();
+
+      if (saveBtn) {
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = `<i class="fas fa-check"></i> 儲存並發布`;
+      }
+    }
+
+    async function deleteMenuItem(itemId) {
+      const item = adminMenu.find(m => m.id === itemId);
+      if (!item) return;
+      if (!confirm(`確定要刪除「${item.name}」嗎？此動作將同步至雲端菜單。`)) return;
+
+      adminMenu = adminMenu.filter(m => m.id !== itemId);
+      await syncMenuToCloud();
+      renderAdminMenu();
+    }
+
+    async function resetDefaultMenu() {
+      if (!confirm('確定要恢復原廠預設的菜單品項嗎？自訂的品項將會被重置。')) return;
+      try {
+        const res = await fetch('/api/menu', { method: 'DELETE' });
+        if (res.ok) {
+          const data = await res.json();
+          adminMenu = data.menu || [];
+          localStorage.setItem('yougu_menu', JSON.stringify(adminMenu));
+          renderAdminMenu();
+          alert('已成功恢復預設菜單！');
+          return;
+        }
+      } catch (err) {
+        console.warn('Reset menu error:', err);
+      }
+      alert('重置完成！');
+      fetchAdminMenu();
+    }
+
+    async function syncMenuToCloud() {
+      localStorage.setItem('yougu_menu', JSON.stringify(adminMenu));
+      try {
+        await fetch('/api/menu', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(adminMenu)
+        });
+      } catch (err) {
+        console.warn('Sync menu error:', err);
+      }
     }
 
     // Initialize

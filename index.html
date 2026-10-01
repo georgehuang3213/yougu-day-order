@@ -295,8 +295,8 @@
 
   <!-- JavaScript 業務邏輯 -->
   <script>
-    // 菜單資料庫 (100% 依據品牌正確規格)
-    const MENU_DATA = [
+    // 菜單資料庫 (支援雲端動態同步，以下為原廠預設規格)
+    let MENU_DATA = [
       {
         id: "blueberry_bowl",
         name: "招牌自製藍莓燕麥優格碗",
@@ -304,7 +304,8 @@
         price: 130,
         desc: "100% 無加糖鮮奶優格 ‧ 招牌手工自製藍莓果醬 ‧ 乾濕分離特製酥脆燕麥粒",
         image: "images/blueberry_bowl.jpg",
-        tag: "人氣招牌"
+        tag: "人氣招牌",
+        available: true
       },
       {
         id: "banana_peanut_bowl",
@@ -313,7 +314,8 @@
         price: 120,
         desc: "新鮮香蕉切片 ‧ 純天然無糖花生醬 ‧ 無加糖鮮奶優格 ‧ 酥脆燕麥堅果",
         image: "images/hero.jpg",
-        tag: "運動首選"
+        tag: "運動首選",
+        available: true
       },
       {
         id: "mango_coconut_bowl",
@@ -322,7 +324,8 @@
         price: 140,
         desc: "鮮切當季芒果 ‧ 香烤椰子脆片 ‧ 超級食物奇亞籽 ‧ 酥脆燕麥粒",
         image: "images/hero.jpg",
-        tag: "清爽果香"
+        tag: "清爽果香",
+        available: true
       },
       {
         id: "honey_nuts_bowl",
@@ -331,7 +334,8 @@
         price: 110,
         desc: "天然純蜂蜜 ‧ 低溫烘焙綜合核桃杏仁 ‧ 100%無加糖鮮奶優格 ‧ 酥脆燕麥",
         image: "images/hero.jpg",
-        tag: "經典純淨"
+        tag: "經典純淨",
+        available: true
       },
       {
         id: "extra_granola",
@@ -340,7 +344,8 @@
         price: 35,
         desc: "手工慢烤燕麥、核桃與南瓜籽，乾濕分離獨立包裝，每一口都極致酥脆！",
         image: "images/hero.jpg",
-        tag: "必備加購"
+        tag: "必備加購",
+        available: true
       },
       {
         id: "extra_blueberry_jam",
@@ -349,15 +354,45 @@
         price: 30,
         desc: "天然新鮮藍莓慢火細熬，減糖健康無添加膠體，滿滿抗氧化花青素！",
         image: "images/blueberry_bowl.jpg",
-        tag: "手工鮮作"
+        tag: "手工鮮作",
+        available: true
       }
     ];
 
     let cart = {}; // { id: qty }
     let currentCategory = 'bowls';
 
+    // 取得最新雲端菜單
+    async function fetchMenu() {
+      try {
+        const res = await fetch('/api/menu');
+        if (res.ok) {
+          const data = await res.json();
+          if (data && Array.isArray(data.menu) && data.menu.length > 0) {
+            MENU_DATA = data.menu;
+            localStorage.setItem('yougu_menu', JSON.stringify(data.menu));
+            renderMenu();
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn('API fetchMenu note:', err);
+      }
+      try {
+        const local = localStorage.getItem('yougu_menu');
+        if (local) {
+          const parsed = JSON.parse(local);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            MENU_DATA = parsed;
+            renderMenu();
+          }
+        }
+      } catch (e) {}
+    }
+
     // 初始化渲染
     window.addEventListener('DOMContentLoaded', () => {
+      fetchMenu();
       renderMenu();
       initDefaultDates();
       loadCartFromStorage();
@@ -404,28 +439,42 @@
       const items = MENU_DATA.filter(item => item.category === currentCategory);
       
       container.innerHTML = items.map(item => {
+        const isAvailable = (item.available !== false);
         const qty = cart[item.id] || 0;
         return `
-          <div class="bg-white rounded-2xl p-3.5 shadow-sm border border-orange-100 flex space-x-3.5">
+          <div class="bg-white rounded-2xl p-3.5 shadow-sm border ${isAvailable ? 'border-orange-100' : 'border-stone-200 bg-stone-50/70 opacity-80'} flex space-x-3.5 transition">
             <div class="w-24 h-24 rounded-xl overflow-hidden bg-orange-100 flex-shrink-0 relative">
-              <img src="${item.image}" alt="${item.name}" class="w-full h-full object-cover">
-              <span class="absolute top-1 left-1 bg-orange-600/90 text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow">
-                ${item.tag}
-              </span>
+              <img src="${item.image || 'images/hero.jpg'}" alt="${item.name}" class="w-full h-full object-cover ${!isAvailable ? 'grayscale-[60%]' : ''}">
+              ${item.tag ? `
+                <span class="absolute top-1 left-1 bg-orange-600/90 text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow">
+                  ${item.tag}
+                </span>
+              ` : ''}
+              ${!isAvailable ? `
+                <span class="absolute inset-0 bg-stone-900/60 flex items-center justify-center text-white text-xs font-black tracking-wider">
+                  已售完
+                </span>
+              ` : ''}
             </div>
             <div class="flex-1 flex flex-col justify-between">
               <div>
                 <h4 class="font-bold text-sm text-brand-dark leading-snug">${item.name}</h4>
-                <p class="text-xs text-stone-500 mt-1 line-clamp-2 leading-relaxed">${item.desc}</p>
+                <p class="text-xs text-stone-500 mt-1 line-clamp-2 leading-relaxed">${item.desc || ''}</p>
               </div>
               <div class="flex items-center justify-between mt-2 pt-1 border-t border-orange-50">
                 <span class="font-black text-base text-orange-600">NT$ ${item.price}</span>
                 <div class="flex items-center space-x-2">
-                  ${qty > 0 ? `
-                    <button onclick="updateQty('${item.id}', -1)" class="w-7 h-7 rounded-full bg-orange-100 text-orange-700 font-black flex items-center justify-center text-sm active:scale-90">-</button>
-                    <span class="font-black text-sm text-brand-dark w-4 text-center">${qty}</span>
-                  ` : ''}
-                  <button onclick="updateQty('${item.id}', 1)" class="w-7 h-7 rounded-full bg-orange-500 hover:bg-orange-600 text-white font-black flex items-center justify-center text-sm active:scale-90 shadow-sm">+</button>
+                  ${isAvailable ? `
+                    ${qty > 0 ? `
+                      <button onclick="updateQty('${item.id}', -1)" class="w-7 h-7 rounded-full bg-orange-100 text-orange-700 font-black flex items-center justify-center text-sm active:scale-90">-</button>
+                      <span class="font-black text-sm text-brand-dark w-4 text-center">${qty}</span>
+                    ` : ''}
+                    <button onclick="updateQty('${item.id}', 1)" class="w-7 h-7 rounded-full bg-orange-500 hover:bg-orange-600 text-white font-black flex items-center justify-center text-sm active:scale-90 shadow-sm">+</button>
+                  ` : `
+                    <span class="px-2.5 py-1 bg-stone-200 text-stone-500 text-xs font-bold rounded-lg cursor-not-allowed">
+                      本日售完
+                    </span>
+                  `}
                 </div>
               </div>
             </div>
