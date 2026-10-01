@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>優穀日・後台訂單管理系統</title>
+  <link rel="icon" type="image/png" href="images/logo.png">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Noto Sans TC', sans-serif; }
+    .status-badge-new { background-color: #FEE2E2; color: #DC2626; border: 1px solid #FCA5A5; }
+    .status-badge-preparing { background-color: #FEF3C7; color: #D97706; border: 1px solid #FCD34D; }
+    .status-badge-ready { background-color: #E0E7FF; color: #4F46E5; border: 1px solid #A5B4FC; }
+    .status-badge-completed { background-color: #D1FAE5; color: #059669; border: 1px solid #6EE7B7; }
+    .status-badge-cancelled { background-color: #F3F4F6; color: #6B7280; border: 1px solid #E5E7EB; }
+  </style>
+</head>
+<body class="bg-stone-100 min-h-screen text-stone-800 antialiased flex flex-col">
+
+  <!-- Header -->
+  <header class="bg-emerald-900 text-white shadow-md sticky top-0 z-30">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <img src="images/logo.png" alt="Logo" class="w-10 h-10 object-contain rounded-full bg-white p-0.5 shadow-sm">
+        <div>
+          <div class="flex items-center space-x-2">
+            <h1 class="text-lg font-bold tracking-wide">優穀日・店長後台</h1>
+            <span class="text-xs bg-emerald-700 text-emerald-100 px-2 py-0.5 rounded-full">即時接單看板</span>
+          </div>
+          <p class="text-xs text-emerald-200">100% 無加糖鮮奶優格專賣・當日接單現做</p>
+        </div>
+      </div>
+      
+      <!-- Right Controls -->
+      <div class="flex items-center space-x-2 sm:space-x-3">
+        <!-- Sound alert toggle -->
+        <button id="soundToggleBtn" onclick="toggleSound()" class="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-800 hover:bg-emerald-700 text-emerald-100 transition shadow-sm">
+          <i id="soundIcon" class="fas fa-volume-up text-amber-300"></i>
+          <span id="soundText" class="hidden sm:inline">新單提示音: 開啟</span>
+        </button>
+
+        <!-- Refresh button -->
+        <button onclick="fetchOrders(true)" class="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-800 hover:bg-emerald-700 text-emerald-100 transition shadow-sm" title="立即重新整理">
+          <i id="refreshIcon" class="fas fa-sync-alt"></i>
+          <span class="hidden sm:inline">更新</span>
+        </button>
+
+        <!-- Customer site link -->
+        <a href="index.html" target="_blank" class="flex items-center space-x-1 px-3 py-1.5 text-xs font-medium rounded-lg bg-amber-500 hover:bg-amber-600 text-white transition shadow-sm">
+          <i class="fas fa-external-link-alt"></i>
+          <span class="hidden sm:inline">點餐前台</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 flex-1 w-full">
+    
+    <!-- Top Summary & Stats -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-6">
+      <div class="bg-white p-4 rounded-xl shadow-sm border border-stone-200 flex items-center justify-between">
+        <div>
+          <p class="text-xs text-stone-500 font-medium">新進待接單</p>
+          <p id="statNewCount" class="text-2xl font-bold text-red-600">0</p>
+        </div>
+        <div class="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center text-red-500 text-lg">
+          <i class="fas fa-bell animate-pulse"></i>
+        </div>
+      </div>
+
+      <div class="bg-white p-4 rounded-xl shadow-sm border border-stone-200 flex items-center justify-between">
+        <div>
+          <p class="text-xs text-stone-500 font-medium">製作中</p>
+          <p id="statPrepCount" class="text-2xl font-bold text-amber-600">0</p>
+        </div>
+        <div class="w-10 h-10 rounded-full bg-amber-50 flex items-center justify-center text-amber-500 text-lg">
+          <i class="fas fa-mortar-pestle"></i>
+        </div>
+      </div>
+
+      <div class="bg-white p-4 rounded-xl shadow-sm border border-stone-200 flex items-center justify-between">
+        <div>
+          <p class="text-xs text-stone-500 font-medium">待顧客取餐</p>
+          <p id="statReadyCount" class="text-2xl font-bold text-indigo-600">0</p>
+        </div>
+        <div class="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-500 text-lg">
+          <i class="fas fa-shopping-bag"></i>
+        </div>
+      </div>
+
+      <div class="bg-white p-4 rounded-xl shadow-sm border border-stone-200 flex items-center justify-between">
+        <div>
+          <p class="text-xs text-stone-500 font-medium">今日累計營業額</p>
+          <p id="statTodayRevenue" class="text-2xl font-bold text-emerald-800">$0</p>
+        </div>
+        <div class="w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-700 text-lg">
+          <i class="fas fa-coins"></i>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ingredient Prep Summary (Collapsible) -->
+    <div class="bg-white rounded-xl shadow-sm border border-stone-200 mb-6 overflow-hidden">
+      <button onclick="togglePrepWidget()" class="w-full px-5 py-3.5 bg-stone-50 hover:bg-stone-100 flex items-center justify-between transition text-left border-b border-stone-200">
+        <div class="flex items-center space-x-2">
+          <i class="fas fa-list-check text-emerald-700"></i>
+          <span class="font-bold text-sm text-stone-800">今日備料清單自動統計（杯數 & 配料匯總）</span>
+        </div>
+        <div class="flex items-center space-x-2 text-xs text-stone-500">
+          <span id="prepSummaryTag">展開查看</span>
+          <i id="prepSummaryIcon" class="fas fa-chevron-down transition-transform"></i>
+        </div>
+      </button>
+      <div id="prepSummaryBody" class="hidden p-5 bg-white">
+        <div id="prepSummaryContent" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
+          <!-- Dynamic prep stats -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Controls & Status Filter Bar -->
+    <div class="bg-white p-4 rounded-xl shadow-sm border border-stone-200 mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <!-- Tabs -->
+      <div class="flex flex-wrap gap-1.5 sm:gap-2">
+        <button onclick="setFilter('all')" id="tab-all" class="filter-tab px-3.5 py-1.5 rounded-lg text-xs font-medium bg-emerald-800 text-white shadow-sm transition">
+          全部 (<span id="count-all">0</span>)
+        </button>
+        <button onclick="setFilter('new')" id="tab-new" class="filter-tab px-3.5 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200 transition">
+          新訂單 (<span id="count-new">0</span>)
+        </button>
+        <button onclick="setFilter('preparing')" id="tab-preparing" class="filter-tab px-3.5 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200 transition">
+          製作中 (<span id="count-preparing">0</span>)
+        </button>
+        <button onclick="setFilter('ready')" id="tab-ready" class="filter-tab px-3.5 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200 transition">
+          待取餐 (<span id="count-ready">0</span>)
+        </button>
+        <button onclick="setFilter('completed')" id="tab-completed" class="filter-tab px-3.5 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200 transition">
+          已完成 (<span id="count-completed">0</span>)
+        </button>
+      </div>
+
+      <!-- Action buttons: Export CSV, Clear mock -->
+      <div class="flex items-center space-x-2 self-end md:self-auto">
+        <button onclick="exportCSV()" class="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-lg text-xs font-medium flex items-center space-x-1.5 transition">
+          <i class="fas fa-file-excel text-emerald-700"></i>
+          <span>匯出訂單 CSV</span>
+        </button>
+        <button onclick="clearDemoOrders()" class="px-3 py-1.5 bg-stone-100 hover:bg-rose-50 text-stone-500 hover:text-rose-600 rounded-lg text-xs font-medium transition" title="清空本地測試資料">
+          <i class="fas fa-trash-alt"></i>
+          <span>清除測試單</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Order List Container -->
+    <div id="ordersContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+      <!-- Loading Placeholder -->
+      <div class="col-span-full text-center py-16">
+        <i class="fas fa-spinner fa-spin text-3xl text-emerald-800 mb-3"></i>
+        <p class="text-stone-500 text-sm">正在載入訂單資料...</p>
+      </div>
+    </div>
+
+    <!-- Empty State -->
+    <div id="emptyState" class="hidden text-center py-16 bg-white rounded-2xl border border-stone-200 p-8">
+      <div class="w-16 h-16 bg-stone-100 rounded-full flex items-center justify-center mx-auto text-stone-400 text-2xl mb-3">
+        <i class="fas fa-inbox"></i>
+      </div>
+      <h3 class="text-stone-700 font-bold text-base mb-1">目前沒有符合條件的訂單</h3>
+      <p class="text-stone-400 text-xs">顧客下單後將自動即時顯示於此看板</p>
+    </div>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="bg-white border-t border-stone-200 py-4 text-center text-xs text-stone-400">
+    優穀日 Homemade Yogurt Bowl © 2026 ・ 即時接單管理系統
+  </footer>
+
+  <script>
+    let orders = [];
+    let currentFilter = 'all';
+    let soundEnabled = true;
+    let lastKnownOrderCount = 0;
+    let pollInterval = null;
+
+    // Web Audio Sound Chime Generator (No external MP3 dependency)
+    function playChime() {
+      if (!soundEnabled) return;
+      try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const now = audioCtx.currentTime;
+        
+        // Note 1: E5 (659Hz)
+        const osc1 = audioCtx.createOscillator();
+        const gain1 = audioCtx.createGain();
+        osc1.type = 'sine';
+        osc1.frequency.setValueAtTime(659.25, now);
+        gain1.gain.setValueAtTime(0.3, now);
+        gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+        osc1.connect(gain1);
+        gain1.connect(audioCtx.destination);
+        osc1.start(now);
+        osc1.stop(now + 0.5);
+
+        // Note 2: G#5 (830Hz)
+        const osc2 = audioCtx.createOscillator();
+        const gain2 = audioCtx.createGain();
+        osc2.type = 'sine';
+        osc2.frequency.setValueAtTime(830.61, now + 0.15);
+        gain2.gain.setValueAtTime(0.3, now + 0.15);
+        gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.7);
+        osc2.connect(gain2);
+        gain2.connect(audioCtx.destination);
+        osc2.start(now + 0.15);
+        osc2.stop(now + 0.7);
+
+        // Note 3: B5 (987Hz)
+        const osc3 = audioCtx.createOscillator();
+        const gain3 = audioCtx.createGain();
+        osc3.type = 'sine';
+        osc3.frequency.setValueAtTime(987.77, now + 0.3);
+        gain3.gain.setValueAtTime(0.35, now + 0.3);
+        gain3.gain.exponentialRampToValueAtTime(0.001, now + 1.1);
+        osc3.connect(gain3);
+        gain3.connect(audioCtx.destination);
+        osc3.start(now + 0.3);
+        osc3.stop(now + 1.1);
+      } catch (e) {
+        console.warn('Audio play failed:', e);
+      }
+    }
+
+    function toggleSound() {
+      soundEnabled = !soundEnabled;
+      const icon = document.getElementById('soundIcon');
+      const text = document.getElementById('soundText');
+      if (soundEnabled) {
+        icon.className = 'fas fa-volume-up text-amber-300';
+        text.innerText = '新單提示音: 開啟';
+        playChime();
+      } else {
+        icon.className = 'fas fa-volume-mute text-stone-400';
+        text.innerText = '新單提示音: 關閉';
+      }
+    }
+
+    // Toggle Prep summary widget
+    function togglePrepWidget() {
+      const body = document.getElementById('prepSummaryBody');
+      const icon = document.getElementById('prepSummaryIcon');
+      const tag = document.getElementById('prepSummaryTag');
+      if (body.classList.contains('hidden')) {
+        body.classList.remove('hidden');
+        icon.classList.add('rotate-180');
+        tag.innerText = '收合清單';
+      } else {
+        body.classList.add('hidden');
+        icon.classList.remove('rotate-180');
+        tag.innerText = '展開查看';
+      }
+    }
+
+    // Filter switching
+    function setFilter(filter) {
+      currentFilter = filter;
+      document.querySelectorAll('.filter-tab').forEach(b => {
+        b.className = 'filter-tab px-3.5 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200 transition';
+      });
+      const activeBtn = document.getElementById(`tab-${filter}`);
+      if (activeBtn) {
+        activeBtn.className = 'filter-tab px-3.5 py-1.5 rounded-lg text-xs font-medium bg-emerald-800 text-white shadow-sm transition';
+      }
+      renderOrders();
+    }
+
+    // Fetch orders from API + sync with localStorage backup
+    async function fetchOrders(isManual = false) {
+      const refreshIcon = document.getElementById('refreshIcon');
+      if (refreshIcon && isManual) refreshIcon.classList.add('fa-spin');
+
+      let remoteOrders = [];
+      try {
+        const res = await fetch('/api/orders');
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.orders) {
+            remoteOrders = data.orders;
+          }
+        }
+      } catch (err) {
+        console.warn('API fetch offline or local fallback:', err);
+      }
+
+      // Merge with localStorage
+      let localOrders = [];
+      try {
+        const stored = localStorage.getItem('yougu_orders');
+        if (stored) localOrders = JSON.parse(stored);
+      } catch (e) {}
+
+      // Combine by unique orderId
+      const map = new Map();
+      localOrders.forEach(o => map.set(o.orderId, o));
+      remoteOrders.forEach(o => map.set(o.orderId, o)); // remote updates win
+
+      const combined = Array.from(map.values());
+      // Sort newest first
+      combined.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+
+      // Check for new incoming orders
+      const currentNewCount = combined.filter(o => o.status === 'new').length;
+      if (currentNewCount > lastKnownOrderCount && lastKnownOrderCount !== 0) {
+        playChime();
+      }
+      lastKnownOrderCount = currentNewCount;
+
+      orders = combined;
+      updateStats();
+      renderOrders();
+
+      if (refreshIcon && isManual) {
+        setTimeout(() => refreshIcon.classList.remove('fa-spin'), 500);
+      }
+    }
+
+    // Update statistics & counts
+    function updateStats() {
+      const countAll = orders.length;
+      const countNew = orders.filter(o => o.status === 'new').length;
+      const countPrep = orders.filter(o => o.status === 'preparing').length;
+      const countReady = orders.filter(o => o.status === 'ready').length;
+      const countCompleted = orders.filter(o => o.status === 'completed').length;
+
+      document.getElementById('count-all').innerText = countAll;
+      document.getElementById('count-new').innerText = countNew;
+      document.getElementById('count-preparing').innerText = countPrep;
+      document.getElementById('count-ready').innerText = countReady;
+      document.getElementById('count-completed').innerText = countCompleted;
+
+      document.getElementById('statNewCount').innerText = countNew;
+      document.getElementById('statPrepCount').innerText = countPrep;
+      document.getElementById('statReadyCount').innerText = countReady;
+
+      // Calculate revenue (excluding cancelled)
+      const validOrders = orders.filter(o => o.status !== 'cancelled');
+      const todayTotal = validOrders.reduce((sum, o) => sum + (o.finalTotal || o.totalAmount || 0), 0);
+      document.getElementById('statTodayRevenue').innerText = `$${todayTotal.toLocaleString()}`;
+
+      // Update Ingredient prep summary
+      updatePrepSummary(validOrders);
+    }
+
+    // Calculate aggregated ingredients
+    function updatePrepSummary(orderList) {
+      const itemCounts = {};
+      let totalCups = 0;
+      let ecoBagCount = 0;
+
+      orderList.forEach(o => {
+        if (o.bringEcoBag) ecoBagCount++;
+        (o.items || []).forEach(item => {
+          totalCups += item.quantity || 1;
+          const name = item.name || '優格碗';
+          itemCounts[name] = (itemCounts[name] || 0) + (item.quantity || 1);
+          
+          if (item.addOns && item.addOns.length > 0) {
+            item.addOns.forEach(add => {
+              const addKey = `【加料】${add.name}`;
+              itemCounts[addKey] = (itemCounts[addKey] || 0) + (item.quantity || 1);
+            });
+          }
+        });
+      });
+
+      const prepContainer = document.getElementById('prepSummaryContent');
+      if (totalCups === 0) {
+        prepContainer.innerHTML = '<p class="col-span-full text-stone-400">目前尚無待備料品項。</p>';
+        return;
+      }
+
+      let html = `
+        <div class="bg-emerald-50 border border-emerald-200 p-3 rounded-lg">
+          <p class="font-bold text-emerald-900 mb-1 text-sm"><i class="fas fa-bowl-rice mr-1.5 text-emerald-700"></i>優格碗總杯數</p>
+          <p class="text-2xl font-black text-emerald-800">${totalCups} <span class="text-xs font-normal text-emerald-700">杯 (無加糖鮮奶優格)</span></p>
+          <p class="text-stone-500 text-[11px] mt-1">自備環保袋顧客：${ecoBagCount} 位</p>
+        </div>
+      `;
+
+      Object.entries(itemCounts).forEach(([name, count]) => {
+        const isAddon = name.startsWith('【加料】');
+        html += `
+          <div class="p-3 rounded-lg border ${isAddon ? 'bg-amber-50/70 border-amber-200' : 'bg-stone-50 border-stone-200'} flex items-center justify-between">
+            <div>
+              <p class="font-semibold ${isAddon ? 'text-amber-900' : 'text-stone-800'}">${name}</p>
+              <p class="text-[11px] text-stone-400">手工當日現點現裝</p>
+            </div>
+            <div class="text-right">
+              <span class="text-xl font-bold ${isAddon ? 'text-amber-800' : 'text-stone-800'}">${count}</span>
+              <span class="text-stone-500 text-xs ml-0.5">份</span>
+            </div>
+          </div>
+        `;
+      });
+
+      prepContainer.innerHTML = html;
+    }
+
+    // Render order cards
+    function renderOrders() {
+      const container = document.getElementById('ordersContainer');
+      const emptyState = document.getElementById('emptyState');
+
+      const filtered = orders.filter(o => {
+        if (currentFilter === 'all') return true;
+        return o.status === currentFilter;
+      });
+
+      if (filtered.length === 0) {
+        container.innerHTML = '';
+        emptyState.classList.remove('hidden');
+        return;
+      }
+
+      emptyState.classList.add('hidden');
+
+      container.innerHTML = filtered.map(o => {
+        const statusMap = {
+          'new': { label: '新進待接單', class: 'status-badge-new', icon: 'fa-bell' },
+          'preparing': { label: '製作中', class: 'status-badge-preparing', icon: 'fa-fire-burner' },
+          'ready': { label: '待顧客取餐', class: 'status-badge-ready', icon: 'fa-bag-shopping' },
+          'completed': { label: '已完成', class: 'status-badge-completed', icon: 'fa-check' },
+          'cancelled': { label: '已取消', class: 'status-badge-cancelled', icon: 'fa-ban' }
+        };
+
+        const statusInfo = statusMap[o.status] || { label: o.status, class: 'status-badge-new', icon: 'fa-circle' };
+        const orderTime = o.createdAt ? new Date(o.createdAt).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' }) : '';
+        const orderDate = o.createdAt ? new Date(o.createdAt).toLocaleDateString('zh-TW', { month: '2-digit', day: '2-digit' }) : '';
+
+        return `
+          <div class="bg-white rounded-2xl shadow-sm border border-stone-200 overflow-hidden flex flex-col justify-between hover:shadow-md transition">
+            <!-- Order Header -->
+            <div class="p-4 border-b border-stone-100 bg-stone-50/50">
+              <div class="flex items-center justify-between mb-2">
+                <span class="font-mono font-bold text-xs bg-stone-200 text-stone-700 px-2 py-0.5 rounded">
+                  #${o.orderId || 'YG-ORDER'}
+                </span>
+                <span class="px-2.5 py-0.5 rounded-full text-xs font-bold flex items-center space-x-1 ${statusInfo.class}">
+                  <i class="fas ${statusInfo.icon} text-[10px]"></i>
+                  <span>${statusInfo.label}</span>
+                </span>
+              </div>
+
+              <!-- Pickup Time Prominent -->
+              <div class="bg-emerald-50/80 border border-emerald-200 rounded-lg p-2.5 flex items-center justify-between text-xs">
+                <div class="flex items-center space-x-2 text-emerald-900 font-bold">
+                  <i class="fas fa-clock text-emerald-700 text-sm"></i>
+                  <span>預約取餐：${o.pickupDate || '今日'} ${o.pickupTime || '盡速'}</span>
+                </div>
+                <span class="text-emerald-700 text-[11px] font-normal">下單 ${orderTime}</span>
+              </div>
+            </div>
+
+            <!-- Customer Details -->
+            <div class="px-4 py-3 border-b border-stone-100 text-xs text-stone-600 space-y-1.5">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-2 font-medium text-stone-800">
+                  <i class="fas fa-user text-stone-400"></i>
+                  <span class="font-bold text-stone-900">${escapeHtml(o.customerName || '顧客')}</span>
+                  ${o.bringEcoBag ? '<span class="bg-emerald-100 text-emerald-800 text-[10px] px-1.5 py-0.2 rounded font-medium"><i class="fas fa-leaf mr-0.5"></i>自備環保袋</span>' : ''}
+                </div>
+                <a href="tel:${o.customerPhone}" class="text-emerald-700 hover:text-emerald-900 font-bold flex items-center space-x-1 bg-emerald-50 px-2 py-0.5 rounded">
+                  <i class="fas fa-phone-alt"></i>
+                  <span>${o.customerPhone || '未留電話'}</span>
+                </a>
+              </div>
+
+              <div class="flex items-center justify-between text-stone-500 pt-0.5">
+                <span>付款方式：<b class="text-stone-700">${o.paymentMethod === 'linepay' ? 'LINE Pay Money' : '現場現金支付'}</b></span>
+                ${o.couponApplied ? '<span class="text-rose-600 font-semibold text-[11px]"><i class="fas fa-tag mr-0.5"></i>已用集點券</span>' : ''}
+              </div>
+
+              ${o.notes ? `
+                <div class="mt-2 bg-stone-100 p-2 rounded text-stone-700 text-[11px] flex items-start space-x-1.5">
+                  <i class="fas fa-comment-dots text-stone-400 mt-0.5"></i>
+                  <p class="leading-snug break-all">${escapeHtml(o.notes)}</p>
+                </div>
+              ` : ''}
+            </div>
+
+            <!-- Items list -->
+            <div class="px-4 py-3 flex-1 text-xs space-y-2">
+              <div class="font-medium text-stone-500 text-[11px] mb-1">訂購品項：</div>
+              ${(o.items || []).map(item => `
+                <div class="flex items-start justify-between pb-1.5 border-b border-dashed border-stone-200 last:border-none">
+                  <div>
+                    <div class="font-bold text-stone-800 flex items-center space-x-1.5">
+                      <span class="text-emerald-800">${item.quantity || 1}x</span>
+                      <span>${escapeHtml(item.name)}</span>
+                    </div>
+                    ${item.addOns && item.addOns.length > 0 ? `
+                      <div class="text-[11px] text-amber-700 pl-4 mt-0.5">
+                        加料: ${item.addOns.map(a => escapeHtml(a.name)).join(', ')}
+                      </div>
+                    ` : ''}
+                  </div>
+                  <span class="text-stone-600 font-medium">$${item.subtotal || item.price}</span>
+                </div>
+              `).join('')}
+            </div>
+
+            <!-- Footer: Total & Actions -->
+            <div class="p-4 bg-stone-50 border-t border-stone-200">
+              <div class="flex items-baseline justify-between mb-3">
+                <span class="text-xs text-stone-500">合計應收金額</span>
+                <span class="text-lg font-black text-emerald-900">$${o.finalTotal || o.totalAmount || 0}</span>
+              </div>
+
+              <!-- Quick Status Transitions -->
+              <div class="grid grid-cols-2 gap-2 text-xs">
+                ${o.status === 'new' ? `
+                  <button onclick="updateStatus('${o.orderId}', 'preparing')" class="col-span-2 py-2 bg-emerald-800 hover:bg-emerald-700 text-white font-bold rounded-lg transition shadow-sm flex items-center justify-center space-x-1.5">
+                    <i class="fas fa-check-circle"></i>
+                    <span>接單並開始製作</span>
+                  </button>
+                ` : ''}
+
+                ${o.status === 'preparing' ? `
+                  <button onclick="updateStatus('${o.orderId}', 'ready')" class="col-span-2 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition shadow-sm flex items-center justify-center space-x-1.5">
+                    <i class="fas fa-shopping-bag"></i>
+                    <span>製作完成・待取餐</span>
+                  </button>
+                ` : ''}
+
+                ${o.status === 'ready' ? `
+                  <button onclick="updateStatus('${o.orderId}', 'completed')" class="col-span-2 py-2 bg-stone-800 hover:bg-stone-900 text-white font-bold rounded-lg transition shadow-sm flex items-center justify-center space-x-1.5">
+                    <i class="fas fa-check-double"></i>
+                    <span>顧客已取餐・結案</span>
+                  </button>
+                ` : ''}
+
+                ${o.status === 'completed' ? `
+                  <div class="col-span-2 py-1.5 text-center text-xs text-emerald-800 font-bold bg-emerald-100 rounded-lg">
+                    <i class="fas fa-check mr-1"></i>訂單已完成結案
+                  </div>
+                ` : ''}
+
+                <!-- Secondary actions -->
+                <button onclick="copyOrderText('${o.orderId}')" class="py-1.5 px-2 bg-white hover:bg-stone-100 border border-stone-300 rounded text-stone-700 font-medium transition text-center flex items-center justify-center space-x-1">
+                  <i class="fas fa-copy text-stone-400"></i>
+                  <span>複製明細</span>
+                </button>
+
+                ${o.status !== 'cancelled' && o.status !== 'completed' ? `
+                  <button onclick="updateStatus('${o.orderId}', 'cancelled')" class="py-1.5 px-2 bg-white hover:bg-rose-50 border border-rose-200 text-rose-600 rounded font-medium transition text-center flex items-center justify-center space-x-1">
+                    <i class="fas fa-times"></i>
+                    <span>取消此單</span>
+                  </button>
+                ` : `
+                  <button onclick="deleteOrder('${o.orderId}')" class="py-1.5 px-2 bg-white hover:bg-rose-50 border border-stone-200 text-stone-400 hover:text-rose-600 rounded text-center">
+                    <i class="fas fa-trash-alt"></i> 刪除紀錄
+                  </button>
+                `}
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Helper to safely escape HTML
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str).replace(/[&<>"']/g, function(m) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m];
+      });
+    }
+
+    // Update order status (PUT /api/orders & localStorage)
+    async function updateStatus(orderId, newStatus) {
+      // Update local state first for instant response
+      const order = orders.find(o => o.orderId === orderId);
+      if (order) {
+        order.status = newStatus;
+        order.updatedAt = new Date().toISOString();
+        localStorage.setItem('yougu_orders', JSON.stringify(orders));
+        updateStats();
+        renderOrders();
+      }
+
+      // Sync to Serverless API
+      try {
+        await fetch('/api/orders', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orderId, status: newStatus })
+        });
+      } catch (err) {
+        console.warn('API status sync note:', err);
+      }
+    }
+
+    // Delete single order
+    function deleteOrder(orderId) {
+      if (!confirm(`確定要刪除訂單 #${orderId} 嗎？`)) return;
+      orders = orders.filter(o => o.orderId !== orderId);
+      localStorage.setItem('yougu_orders', JSON.stringify(orders));
+      updateStats();
+      renderOrders();
+    }
+
+    // Copy order text formatted for sending in LINE
+    function copyOrderText(orderId) {
+      const order = orders.find(o => o.orderId === orderId);
+      if (!order) return;
+
+      const itemsStr = (order.items || []).map(i => `・${i.name} x${i.quantity || 1} $${i.subtotal || i.price}`).join('\n');
+      const text = `【優穀日 訂單通知】\n單號：#${order.orderId}\n顧客：${order.customerName} (${order.customerPhone})\n取餐時間：${order.pickupDate} ${order.pickupTime}\n\n訂單明細：\n${itemsStr}\n\n應收金額：$${order.finalTotal || order.totalAmount}\n付款：${order.paymentMethod === 'linepay' ? 'LINE Pay Money' : '現金'}\n備註：${order.notes || '無'}`;
+
+      navigator.clipboard.writeText(text).then(() => {
+        alert(`已複製訂單 #${orderId} 明細！可直接貼在 LINE 傳給顧客。`);
+      });
+    }
+
+    // Export orders as CSV
+    function exportCSV() {
+      if (orders.length === 0) {
+        alert('目前無訂單可匯出');
+        return;
+      }
+
+      let csv = "\uFEFF單號,下單時間,取餐日期,取餐時間,顧客姓名,電話,品項清單,合計金額,付款方式,狀態,備註\n";
+      orders.forEach(o => {
+        const items = (o.items || []).map(i => `${i.name}x${i.quantity}`).join('; ');
+        const row = [
+          o.orderId || '',
+          o.createdAt || '',
+          o.pickupDate || '',
+          o.pickupTime || '',
+          `"${(o.customerName || '').replace(/"/g, '""')}"`,
+          `'${o.customerPhone || ''}`,
+          `"${items.replace(/"/g, '""')}"`,
+          o.finalTotal || o.totalAmount || 0,
+          o.paymentMethod || 'cash',
+          o.status || '',
+          `"${(o.notes || '').replace(/"/g, '""')}"`
+        ];
+        csv += row.join(',') + "\n";
+      });
+
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `優穀日_訂單清單_${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    // Clear demo orders
+    function clearDemoOrders() {
+      if (!confirm('確定要清空所有測試訂單資料嗎？')) return;
+      orders = [];
+      localStorage.removeItem('yougu_orders');
+      updateStats();
+      renderOrders();
+    }
+
+    // Initialize
+    window.addEventListener('DOMContentLoaded', () => {
+      fetchOrders();
+      // Poll every 8 seconds for new orders
+      pollInterval = setInterval(() => {
+        fetchOrders(false);
+      }, 8000);
+    });
+  </script>
+</body>
+</html>

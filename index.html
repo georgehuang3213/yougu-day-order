@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>優穀日・手作燕麥優格碗 ｜ 線上預訂點餐</title>
+  <!-- Tailwind CSS & Google Fonts -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Noto+Serif+TC:wght@600;900&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              orange: '#FF6B4A',
+              gold: '#FFA000',
+              cream: '#FFFDF6',
+              card: '#FFF8EE',
+              green: '#00C853',
+              dark: '#24180F',
+            }
+          },
+          fontFamily: {
+            serif: ['"Noto Serif TC"', 'serif'],
+            sans: ['"Noto Sans TC"', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      background-color: #FAF6ED;
+      font-family: 'Noto Sans TC', sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .hide-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .hide-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+</head>
+<body class="text-brand-dark pb-28">
+
+  <!-- 頂部品牌 Header -->
+  <header class="bg-white shadow-sm border-b border-orange-100 sticky top-0 z-30">
+    <div class="max-w-md mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <img src="images/logo.png" alt="優穀日 Logo" class="w-12 h-12 rounded-full border-2 border-orange-400 p-0.5 object-cover bg-white shadow-sm">
+        <div>
+          <h1 class="font-serif font-black text-lg text-brand-dark leading-tight">優穀日・Homemade</h1>
+          <p class="text-xs text-orange-600 font-bold">100% 無加糖鮮奶優格 ‧ 自製藍莓果醬</p>
+        </div>
+      </div>
+      <a href="admin.html" class="text-xs bg-orange-100 text-orange-800 font-bold px-2.5 py-1.5 rounded-full hover:bg-orange-200 transition">
+        店家接單
+      </a>
+    </div>
+  </header>
+
+  <!-- 門市營業重要公告 Banner -->
+  <div class="max-w-md mx-auto px-4 pt-3">
+    <div class="bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-2xl p-3.5 shadow-md text-xs leading-relaxed space-y-1">
+      <div class="flex items-center space-x-1.5 font-bold text-amber-100">
+        <span class="text-base">📢</span>
+        <span class="text-sm text-white">門市點餐 ＆ 營業重要提醒</span>
+      </div>
+      <p class="text-white/95">✔ <strong>平日 07:30 - 16:00</strong>（六日及國定假日固定公休）</p>
+      <p class="text-white/95">✔ <strong>僅限外帶・無內用</strong> ｜ 付款支援 <strong>現金 / LINE Pay Money</strong></p>
+      <p class="text-amber-100 font-medium">✨ 隔夜燕麥需前一天手工慢浸潤，請提前線上預約！</p>
+    </div>
+  </div>
+
+  <!-- 主視覺特寫海報 -->
+  <div class="max-w-md mx-auto px-4 pt-3">
+    <div class="relative rounded-2xl overflow-hidden shadow-sm h-36 bg-orange-200">
+      <img src="images/hero.jpg" alt="美味燕麥優格碗" class="w-full h-full object-cover">
+      <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent flex items-end p-3.5">
+        <div class="text-white">
+          <span class="bg-emerald-500 text-[11px] font-bold px-2 py-0.5 rounded-md">乾濕分離・極致酥脆</span>
+          <h2 class="font-serif font-black text-base mt-1">手作純淨健康 ‧ 為早晨注入元氣</h2>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 餐點類別切換 -->
+  <div class="max-w-md mx-auto px-4 pt-4 sticky top-16 bg-[#FAF6ED] z-20 py-2">
+    <div class="flex space-x-2 border-b border-orange-200 pb-2">
+      <button onclick="filterCategory('bowls')" id="tab-bowls" class="category-tab active px-4 py-1.5 rounded-full text-sm font-bold bg-orange-500 text-white shadow-sm transition">
+        🥣 經典燕麥優格碗
+      </button>
+      <button onclick="filterCategory('addons')" id="tab-addons" class="category-tab px-4 py-1.5 rounded-full text-sm font-bold bg-white text-stone-700 border border-orange-200 transition">
+        🌾 加購脆粒與果醬
+      </button>
+    </div>
+  </div>
+
+  <!-- 餐點列表 -->
+  <main class="max-w-md mx-auto px-4 pt-2 space-y-3" id="menu-container">
+    <!-- 餐點項目由 JavaScript 動態渲染 -->
+  </main>
+
+  <!-- 底部購物車浮動列 -->
+  <div id="cart-bar" class="fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-orange-200 shadow-2xl transition-transform duration-300 translate-y-full">
+    <div class="max-w-md mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center space-x-3 cursor-pointer" onclick="toggleCartModal()">
+        <div class="relative bg-orange-500 text-white p-2.5 rounded-2xl shadow-md">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+          </svg>
+          <span id="cart-badge" class="absolute -top-1.5 -right-1.5 bg-red-600 text-white text-xs font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-white">0</span>
+        </div>
+        <div>
+          <div class="text-xs text-stone-500 font-medium">合計金額</div>
+          <div class="text-xl font-black text-orange-600 leading-none" id="cart-total-display">NT$ 0</div>
+        </div>
+      </div>
+      <button onclick="openCheckoutModal()" class="bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white font-black px-6 py-3 rounded-2xl shadow-lg shadow-emerald-500/20 text-sm flex items-center space-x-1.5 transition">
+        <span>填寫訂單 ➔</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- 購物車清單彈窗 Modal -->
+  <div id="cart-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden flex items-end justify-center transition-opacity">
+    <div class="bg-white w-full max-w-md rounded-t-3xl max-h-[85vh] flex flex-col overflow-hidden animate-slide-up">
+      <div class="p-4 border-b border-orange-100 flex items-center justify-between bg-orange-50">
+        <h3 class="font-black text-base text-brand-dark flex items-center space-x-2">
+          <span>🛒 購物車餐點清單</span>
+        </h3>
+        <button onclick="toggleCartModal()" class="text-stone-400 hover:text-stone-700 p-1 text-xl font-bold">&times;</button>
+      </div>
+      <div class="p-4 overflow-y-auto space-y-3 flex-1" id="cart-items-list">
+        <!-- 購物車品項由 JS 渲染 -->
+      </div>
+      <div class="p-4 border-t border-orange-100 bg-stone-50 space-y-3">
+        <div class="flex justify-between items-center text-sm font-bold">
+          <span>餐點小計</span>
+          <span id="modal-subtotal" class="text-lg text-orange-600 font-black">NT$ 0</span>
+        </div>
+        <button onclick="openCheckoutModal()" class="w-full bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white font-black py-3.5 rounded-2xl text-base shadow-md transition">
+          前往填寫取餐資訊 ➔
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 結帳填寫與送出彈窗 Checkout Modal -->
+  <div id="checkout-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden flex items-end justify-center">
+    <div class="bg-white w-full max-w-md rounded-t-3xl max-h-[92vh] flex flex-col overflow-hidden">
+      <!-- Modal Header -->
+      <div class="p-4 border-b border-orange-100 flex items-center justify-between bg-orange-50">
+        <div>
+          <h3 class="font-serif font-black text-lg text-brand-dark">確認訂單與取餐資訊</h3>
+          <p class="text-xs text-orange-600 font-medium">優穀日 ‧ 每日手作限量供應</p>
+        </div>
+        <button onclick="closeCheckoutModal()" class="text-stone-400 hover:text-stone-700 p-1 text-2xl font-bold">&times;</button>
+      </div>
+
+      <!-- 表單內容 -->
+      <div class="p-4 overflow-y-auto space-y-4 flex-1 text-sm">
+        
+        <!-- 取餐人資料 -->
+        <div class="space-y-2.5">
+          <label class="block font-bold text-stone-700">1. 訂購人姓名 <span class="text-red-500">*</span></label>
+          <input type="text" id="cust-name" placeholder="請輸入取餐人姓名" class="w-full px-3.5 py-2.5 border border-stone-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-400 font-medium">
+        </div>
+
+        <div class="space-y-2.5">
+          <label class="block font-bold text-stone-700">2. 聯絡手機號碼 <span class="text-red-500">*</span></label>
+          <input type="tel" id="cust-phone" placeholder="例如：0912345678" class="w-full px-3.5 py-2.5 border border-stone-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-400 font-medium">
+        </div>
+
+        <!-- 預約日期與時間 (防呆：六日公休提醒) -->
+        <div class="grid grid-cols-2 gap-3">
+          <div class="space-y-1.5">
+            <label class="block font-bold text-stone-700">3. 預約取餐日期 <span class="text-red-500">*</span></label>
+            <input type="date" id="pickup-date" onchange="checkPickupDate()" class="w-full px-3 py-2 border border-stone-300 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-orange-400">
+            <p id="date-warning" class="text-[11px] text-red-500 font-bold hidden">⚠️ 六日與國定假日公休！</p>
+          </div>
+          <div class="space-y-1.5">
+            <label class="block font-bold text-stone-700">預約時間 (07:30-16:00) <span class="text-red-500">*</span></label>
+            <select id="pickup-time" class="w-full px-3 py-2 border border-stone-300 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-orange-400">
+              <option value="07:30">07:30</option>
+              <option value="08:00">08:00</option>
+              <option value="08:30" selected>08:30</option>
+              <option value="09:00">09:00</option>
+              <option value="09:30">09:30</option>
+              <option value="10:00">10:00</option>
+              <option value="10:30">10:30</option>
+              <option value="11:00">11:00</option>
+              <option value="11:30">11:30</option>
+              <option value="12:00">12:00</option>
+              <option value="12:30">12:30</option>
+              <option value="13:00">13:00</option>
+              <option value="13:30">13:30</option>
+              <option value="14:00">14:00</option>
+              <option value="14:30">14:30</option>
+              <option value="15:00">15:00</option>
+              <option value="15:30">15:30</option>
+              <option value="16:00">16:00</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- 付款方式 (嚴格落實只收現金/LINE Pay Money) -->
+        <div class="space-y-2">
+          <label class="block font-bold text-stone-700">4. 付款方式 (門市僅限外帶)</label>
+          <div class="grid grid-cols-2 gap-2.5">
+            <label class="flex items-center space-x-2 border-2 border-orange-400 bg-orange-50/50 p-3 rounded-xl cursor-pointer">
+              <input type="radio" name="payment" value="現金付款" checked class="text-orange-500 focus:ring-orange-400">
+              <span class="font-bold text-xs">💵 現金付款</span>
+            </label>
+            <label class="flex items-center space-x-2 border-2 border-emerald-400 bg-emerald-50/50 p-3 rounded-xl cursor-pointer">
+              <input type="radio" name="payment" value="LINE Pay Money" class="text-emerald-500 focus:ring-emerald-400">
+              <span class="font-bold text-xs">📱 LINE Pay Money</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- 集點優惠券折抵 -->
+        <div class="space-y-2 bg-amber-50 p-3 rounded-2xl border border-amber-200">
+          <label class="block font-bold text-amber-900 text-xs flex items-center justify-between">
+            <span>🎁 集點卡優惠折抵</span>
+            <span class="text-[11px] text-amber-700">滿額回饋</span>
+          </label>
+          <select id="discount-select" onchange="calculateFinalTotal()" class="w-full px-3 py-2 border border-amber-300 rounded-xl text-xs font-bold bg-white text-stone-800">
+            <option value="0">無使用優惠券 (NT$ 0)</option>
+            <option value="20">集點滿額折抵 20 元 (-NT$ 20)</option>
+            <option value="item">集點滿點免費折抵乙份優格碗 (-NT$ 130)</option>
+          </select>
+        </div>
+
+        <!-- 環保自備提袋 -->
+        <div class="bg-stone-50 p-3 rounded-xl border border-stone-200">
+          <label class="flex items-center space-x-2.5 cursor-pointer">
+            <input type="checkbox" id="eco-bag" checked class="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500">
+            <span class="text-xs font-bold text-stone-700">🌱 響應環保，我會自備購物提袋</span>
+          </label>
+        </div>
+
+        <!-- 備註 -->
+        <div class="space-y-1.5">
+          <label class="block font-bold text-stone-700 text-xs">備註說明 (選填)</label>
+          <input type="text" id="order-note" placeholder="例如：附木湯匙、不要肉桂粉等" class="w-full px-3 py-2 border border-stone-300 rounded-xl text-xs">
+        </div>
+
+        <!-- 金額總結算 -->
+        <div class="bg-orange-50/70 p-3.5 rounded-2xl border border-orange-200 space-y-1.5">
+          <div class="flex justify-between text-xs text-stone-600">
+            <span>餐點小計</span>
+            <span id="summary-subtotal" class="font-bold">NT$ 0</span>
+          </div>
+          <div class="flex justify-between text-xs text-red-500 font-bold" id="summary-discount-row">
+            <span>優惠券折抵</span>
+            <span id="summary-discount">- NT$ 0</span>
+          </div>
+          <div class="border-t border-orange-200 pt-1.5 flex justify-between items-center">
+            <span class="font-black text-sm text-stone-800">應付總金額</span>
+            <span id="summary-final-total" class="font-black text-xl text-orange-600">NT$ 0</span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- 雙按鈕送出操作區 -->
+      <div class="p-4 border-t border-orange-100 bg-white space-y-2">
+        <!-- 核心亮點按鈕：一鍵傳送訂單至官方 LINE -->
+        <button onclick="submitOrderViaLine()" class="w-full bg-[#06C755] hover:bg-[#05b34c] active:scale-95 text-white font-black py-3.5 rounded-2xl text-base shadow-lg shadow-green-500/20 flex items-center justify-center space-x-2 transition">
+          <svg class="w-6 h-6 fill-current" viewBox="0 0 24 24">
+            <path d="M12 2C6.48 2 2 5.92 2 10.76c0 2.98 1.74 5.62 4.43 7.15-.2.72-.73 2.62-.84 3.03-.13.51.18.5.38.37.15-.1 2.39-1.63 3.36-2.3.88.25 1.8.38 2.67.38 5.52 0 10-3.92 10-8.76S17.52 2 12 2z"/>
+          </svg>
+          <span>一鍵傳送訂單到官方 LINE ➔</span>
+        </button>
+        <p class="text-[11px] text-center text-stone-400 font-medium">送出後將自動儲存至店家接單系統並開啟 LINE 發送確認</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- JavaScript 業務邏輯 -->
+  <script>
+    // 菜單資料庫 (100% 依據品牌正確規格)
+    const MENU_DATA = [
+      {
+        id: "blueberry_bowl",
+        name: "招牌自製藍莓燕麥優格碗",
+        category: "bowls",
+        price: 130,
+        desc: "100% 無加糖鮮奶優格 ‧ 招牌手工自製藍莓果醬 ‧ 乾濕分離特製酥脆燕麥粒",
+        image: "images/blueberry_bowl.jpg",
+        tag: "人氣招牌"
+      },
+      {
+        id: "banana_peanut_bowl",
+        name: "濃醇香蕉花生醬燕麥優格碗",
+        category: "bowls",
+        price: 120,
+        desc: "新鮮香蕉切片 ‧ 純天然無糖花生醬 ‧ 無加糖鮮奶優格 ‧ 酥脆燕麥堅果",
+        image: "images/hero.jpg",
+        tag: "運動首選"
+      },
+      {
+        id: "mango_coconut_bowl",
+        name: "盛夏芒果椰片奇亞籽優格碗",
+        category: "bowls",
+        price: 140,
+        desc: "鮮切當季芒果 ‧ 香烤椰子脆片 ‧ 超級食物奇亞籽 ‧ 酥脆燕麥粒",
+        image: "images/hero.jpg",
+        tag: "清爽果香"
+      },
+      {
+        id: "honey_nuts_bowl",
+        name: "純粹蜂蜜堅果燕麥優格碗",
+        category: "bowls",
+        price: 110,
+        desc: "天然純蜂蜜 ‧ 低溫烘焙綜合核桃杏仁 ‧ 100%無加糖鮮奶優格 ‧ 酥脆燕麥",
+        image: "images/hero.jpg",
+        tag: "經典純淨"
+      },
+      {
+        id: "extra_granola",
+        name: "加購特製手作燕麥脆粒 (袋裝 40g)",
+        category: "addons",
+        price: 35,
+        desc: "手工慢烤燕麥、核桃與南瓜籽，乾濕分離獨立包裝，每一口都極致酥脆！",
+        image: "images/hero.jpg",
+        tag: "必備加購"
+      },
+      {
+        id: "extra_blueberry_jam",
+        name: "加購自製手工藍莓果醬罐 (35g)",
+        category: "addons",
+        price: 30,
+        desc: "天然新鮮藍莓慢火細熬，減糖健康無添加膠體，滿滿抗氧化花青素！",
+        image: "images/blueberry_bowl.jpg",
+        tag: "手工鮮作"
+      }
+    ];
+
+    let cart = {}; // { id: qty }
+    let currentCategory = 'bowls';
+
+    // 初始化渲染
+    window.addEventListener('DOMContentLoaded', () => {
+      renderMenu();
+      initDefaultDates();
+      loadCartFromStorage();
+    });
+
+    function initDefaultDates() {
+      const now = new Date();
+      // 隔天日期預設
+      const tomorrow = new Date(now);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      
+      const yyyy = tomorrow.getFullYear();
+      const mm = String(tomorrow.getMonth() + 1).padStart(2, '0');
+      const dd = String(tomorrow.getDate()).padStart(2, '0');
+      document.getElementById('pickup-date').value = `${yyyy}-${mm}-${dd}`;
+      checkPickupDate();
+    }
+
+    function checkPickupDate() {
+      const dateVal = document.getElementById('pickup-date').value;
+      if (!dateVal) return;
+      const d = new Date(dateVal);
+      const day = d.getDay(); // 0 is Sunday, 6 is Saturday
+      const warning = document.getElementById('date-warning');
+      if (day === 0 || day === 6) {
+        warning.classList.remove('hidden');
+      } else {
+        warning.classList.add('hidden');
+      }
+    }
+
+    function filterCategory(cat) {
+      currentCategory = cat;
+      document.querySelectorAll('.category-tab').forEach(b => {
+        b.className = 'category-tab px-4 py-1.5 rounded-full text-sm font-bold bg-white text-stone-700 border border-orange-200 transition';
+      });
+      const activeBtn = document.getElementById(`tab-${cat}`);
+      activeBtn.className = 'category-tab active px-4 py-1.5 rounded-full text-sm font-bold bg-orange-500 text-white shadow-sm transition';
+      renderMenu();
+    }
+
+    function renderMenu() {
+      const container = document.getElementById('menu-container');
+      const items = MENU_DATA.filter(item => item.category === currentCategory);
+      
+      container.innerHTML = items.map(item => {
+        const qty = cart[item.id] || 0;
+        return `
+          <div class="bg-white rounded-2xl p-3.5 shadow-sm border border-orange-100 flex space-x-3.5">
+            <div class="w-24 h-24 rounded-xl overflow-hidden bg-orange-100 flex-shrink-0 relative">
+              <img src="${item.image}" alt="${item.name}" class="w-full h-full object-cover">
+              <span class="absolute top-1 left-1 bg-orange-600/90 text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow">
+                ${item.tag}
+              </span>
+            </div>
+            <div class="flex-1 flex flex-col justify-between">
+              <div>
+                <h4 class="font-bold text-sm text-brand-dark leading-snug">${item.name}</h4>
+                <p class="text-xs text-stone-500 mt-1 line-clamp-2 leading-relaxed">${item.desc}</p>
+              </div>
+              <div class="flex items-center justify-between mt-2 pt-1 border-t border-orange-50">
+                <span class="font-black text-base text-orange-600">NT$ ${item.price}</span>
+                <div class="flex items-center space-x-2">
+                  ${qty > 0 ? `
+                    <button onclick="updateQty('${item.id}', -1)" class="w-7 h-7 rounded-full bg-orange-100 text-orange-700 font-black flex items-center justify-center text-sm active:scale-90">-</button>
+                    <span class="font-black text-sm text-brand-dark w-4 text-center">${qty}</span>
+                  ` : ''}
+                  <button onclick="updateQty('${item.id}', 1)" class="w-7 h-7 rounded-full bg-orange-500 hover:bg-orange-600 text-white font-black flex items-center justify-center text-sm active:scale-90 shadow-sm">+</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function updateQty(id, delta) {
+      const current = cart[id] || 0;
+      const next = current + delta;
+      if (next <= 0) {
+        delete cart[id];
+      } else {
+        cart[id] = next;
+      }
+      saveCartToStorage();
+      renderMenu();
+      updateCartDisplay();
+    }
+
+    function saveCartToStorage() {
+      localStorage.setItem('yougu_cart', JSON.stringify(cart));
+    }
+
+    function loadCartFromStorage() {
+      try {
+        const saved = localStorage.getItem('yougu_cart');
+        if (saved) cart = JSON.parse(saved);
+      } catch (e) {}
+      updateCartDisplay();
+      renderMenu();
+    }
+
+    function updateCartDisplay() {
+      let totalQty = 0;
+      let subtotal = 0;
+      for (const [id, qty] of Object.entries(cart)) {
+        const item = MENU_DATA.find(m => m.id === id);
+        if (item) {
+          totalQty += qty;
+          subtotal += item.price * qty;
+        }
+      }
+
+      const cartBar = document.getElementById('cart-bar');
+      const cartBadge = document.getElementById('cart-badge');
+      const totalDisplay = document.getElementById('cart-total-display');
+
+      cartBadge.innerText = totalQty;
+      totalDisplay.innerText = `NT$ ${subtotal}`;
+
+      if (totalQty > 0) {
+        cartBar.classList.remove('translate-y-full');
+      } else {
+        cartBar.classList.add('translate-y-full');
+        document.getElementById('cart-modal').classList.add('hidden');
+      }
+
+      renderCartModalItems(subtotal);
+    }
+
+    function toggleCartModal() {
+      const modal = document.getElementById('cart-modal');
+      modal.classList.toggle('hidden');
+    }
+
+    function renderCartModalItems(subtotal) {
+      const list = document.getElementById('cart-items-list');
+      const itemsHtml = Object.entries(cart).map(([id, qty]) => {
+        const item = MENU_DATA.find(m => m.id === id);
+        if (!item) return '';
+        return `
+          <div class="flex items-center justify-between border-b border-orange-50 pb-2">
+            <div>
+              <div class="font-bold text-sm text-brand-dark">${item.name}</div>
+              <div class="text-xs text-orange-600 font-bold">NT$ ${item.price} × ${qty} = NT$ ${item.price * qty}</div>
+            </div>
+            <div class="flex items-center space-x-2">
+              <button onclick="updateQty('${id}', -1)" class="w-6 h-6 rounded-full bg-orange-100 text-orange-700 font-bold flex items-center justify-center text-xs">-</button>
+              <span class="font-bold text-xs">${qty}</span>
+              <button onclick="updateQty('${id}', 1)" class="w-6 h-6 rounded-full bg-orange-500 text-white font-bold flex items-center justify-center text-xs">+</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      list.innerHTML = itemsHtml || '<p class="text-stone-400 text-center py-6 text-sm">購物車目前是空的唷！</p>';
+      document.getElementById('modal-subtotal').innerText = `NT$ ${subtotal}`;
+    }
+
+    function openCheckoutModal() {
+      document.getElementById('cart-modal').classList.add('hidden');
+      document.getElementById('checkout-modal').classList.remove('hidden');
+      calculateFinalTotal();
+    }
+
+    function closeCheckoutModal() {
+      document.getElementById('checkout-modal').classList.add('hidden');
+    }
+
+    function calculateFinalTotal() {
+      let subtotal = 0;
+      for (const [id, qty] of Object.entries(cart)) {
+        const item = MENU_DATA.find(m => m.id === id);
+        if (item) subtotal += item.price * qty;
+      }
+
+      const discountType = document.getElementById('discount-select').value;
+      let discountAmount = 0;
+
+      if (discountType === '20') {
+        discountAmount = Math.min(20, subtotal);
+      } else if (discountType === 'item') {
+        // 折抵單份最貴品項 (最高140元)
+        discountAmount = Math.min(130, subtotal);
+      }
+
+      const finalTotal = Math.max(0, subtotal - discountAmount);
+
+      document.getElementById('summary-subtotal').innerText = `NT$ ${subtotal}`;
+      document.getElementById('summary-discount').innerText = `- NT$ ${discountAmount}`;
+      document.getElementById('summary-final-total').innerText = `NT$ ${finalTotal}`;
+      return { subtotal, discountAmount, finalTotal };
+    }
+
+    // 核心提交功能：一鍵送出至官方 LINE 聊天室 ＋ API 異步紀錄
+    async function submitOrderViaLine() {
+      const name = document.getElementById('cust-name').value.trim();
+      const phone = document.getElementById('cust-phone').value.trim();
+      const date = document.getElementById('pickup-date').value;
+      const time = document.getElementById('pickup-time').value;
+      const payment = document.querySelector('input[name="payment"]:checked').value;
+      const needBag = document.getElementById('eco-bag').checked;
+      const discountSelect = document.getElementById('discount-select');
+      const discountName = discountSelect.options[discountSelect.selectedIndex].text;
+      const note = document.getElementById('order-note').value.trim();
+
+      if (!name) {
+        alert("請輸入訂購人姓名！");
+        return;
+      }
+      if (!phone) {
+        alert("請輸入聯絡手機號碼！");
+        return;
+      }
+      if (!date) {
+        alert("請選擇預約取餐日期！");
+        return;
+      }
+
+      const { subtotal, discountAmount, finalTotal } = calculateFinalTotal();
+
+      // 構建餐點明細
+      const orderItems = [];
+      let itemsText = "";
+      for (const [id, qty] of Object.entries(cart)) {
+        const item = MENU_DATA.find(m => m.id === id);
+        if (item) {
+          orderItems.push({ id, name: item.name, price: item.price, qty });
+          itemsText += `▫️ ${item.name} × ${qty} (NT$ ${item.price * qty})\n`;
+        }
+      }
+
+      const orderPayload = {
+        customerName: name,
+        phone,
+        pickupDate: date,
+        pickupTime: time,
+        paymentMethod: payment,
+        needBag,
+        discountCode: discountName,
+        discountAmount,
+        items: orderItems,
+        subtotal,
+        total: finalTotal,
+        note
+      };
+
+      // 1. 同步提交至後端 Vercel Serverless API
+      try {
+        await fetch('/api/orders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(orderPayload)
+        });
+      } catch (err) {
+        console.warn("API 存取失敗，使用本機儲存與 LINE 直接通訊：", err);
+      }
+
+      // 2. 本地儲存備份訂單
+      const localOrders = JSON.parse(localStorage.getItem('yougu_orders') || '[]');
+      localOrders.unshift({ ...orderPayload, id: `YG-${Date.now().toString().slice(-4)}`, createdAt: new Date().toISOString() });
+      localStorage.setItem('yougu_orders', JSON.stringify(localOrders));
+
+      // 3. 生成排版極美的 LINE 官方訂單訊息
+      const lineMessage = 
+`🥣【 優穀日・線上預約訂單 】
+──────────────────
+👤 訂購姓名：${name}
+📱 手機號碼：${phone}
+📅 取餐日期：${date}
+⏰ 取餐時間：${time}
+💵 付款方式：${payment}
+🛍️ 自備購物袋：${needBag ? '是 (響應環保)' : '否'}
+──────────────────
+📋 訂購品項：
+${itemsText}──────────────────
+💰 餐點小計：NT$ ${subtotal}
+🎁 優惠折抵：- NT$ ${discountAmount} (${discountName})
+🔥 實付總額：NT$ ${finalTotal}
+${note ? `📝 備註事項：${note}\n` : ''}──────────────────
+✨ 收到請回覆確認，感謝您的預約！`;
+
+      // 清空購物車
+      cart = {};
+      saveCartToStorage();
+      updateCartDisplay();
+      closeCheckoutModal();
+
+      // 開啟 LINE 發送訊息到官方帳號
+      const encodedMsg = encodeURIComponent(lineMessage);
+      // LINE 官方帳號深層連結 (換成官方 ID @yougu_day 或直接開啟 LINE)
+      const lineUrl = `https://line.me/R/oaMessage/@yougu_day/?${encodedMsg}`;
+      
+      alert("訂單已成立！即將為您跳轉至官方 LINE 發送確認訂單 ➔");
+      window.location.href = lineUrl;
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+{
+  "name": "yougu-day-order-system",
+  "version": "1.0.0",
+  "description": "優穀日 Homemade Yogurt Bowl 線上接單與管理系統",
+  "private": true,
+  "scripts": {
+    "start": "npx serve public"
+  }
+}
