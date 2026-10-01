@@ -267,6 +267,7 @@
     let soundEnabled = true;
     let lastKnownOrderCount = 0;
     let pollInterval = null;
+    let isBusy = false; // 防止刪除/更新進行中被輪詢覆蓋
 
     // Web Audio Sound Chime Generator (No external MP3 dependency)
     function playChime() {
@@ -360,6 +361,9 @@
 
     // Fetch orders from API (Cloudflare R2 as Single Source of Truth)
     async function fetchOrders(isManual = false) {
+      // 若正在進行刪除/更新操作，跳過本次輪詢避免覆蓋
+      if (isBusy && !isManual) return;
+
       const refreshIcon = document.getElementById('refreshIcon');
       if (refreshIcon && isManual) refreshIcon.classList.add('fa-spin');
 
@@ -700,33 +704,48 @@
 
     // Delete single order
     async function deleteOrder(orderId) {
-      const displayId = (orderId && orderId !== 'undefined' && orderId !== 'null') ? `#${orderId}` : '此筆異常';
-      if (!confirm(`確定要刪除訂單 ${displayId} 嗎？此動作將同步從雲端資料庫與本機移除。`)) return;
+      const isGhost = !orderId || orderId === 'undefined' || orderId === 'null';
+      const displayId = isGhost ? '此筆異常訂單' : `#${orderId}`;
+      if (!confirm(`確定要刪除訂單 ${displayId} 嗎？`)) return;
 
-      // Clean from local memory immediately (and clean any ghost undefined orders)
-      orders = orders.filter(o => {
-        const id = o.orderId || o.id;
-        if (!orderId || orderId === 'undefined' || orderId === 'null') {
-          return !!id; // 移除所有沒有 ID 的異常訂單
-        }
-        return (id !== orderId && o.orderId !== orderId && o.id !== orderId);
-      });
+      // 鎖定：防止輪詢在刪除期間覆蓋資料
+      isBusy = true;
 
-      localStorage.setItem('yougu_orders', JSON.stringify(orders));
-      updateStats();
-      renderOrders();
-
-      // Sync delete with Cloudflare R2
-      if (orderId && orderId !== 'undefined' && orderId !== 'null') {
-        try {
+      try {
+        // 先呼叫 API 從 Cloudflare R2 雲端刪除
+        if (!isGhost) {
           await fetch(`/api/orders?id=${encodeURIComponent(orderId)}`, {
             method: 'DELETE',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id: orderId, orderId: orderId })
           });
-        } catch (err) {
-          console.warn('API delete sync note:', err);
         }
+
+        // API 刪除成功後，再更新本機狀態與畫面
+        orders = orders.filter(o => {
+          const id = o.orderId || o.id;
+          if (isGhost) return !!id; // 移除所有沒有 ID 的異常訂單
+          return id !== orderId && o.orderId !== orderId && o.id !== orderId;
+        });
+
+        localStorage.setItem('yougu_orders', JSON.stringify(orders));
+        updateStats();
+        renderOrders();
+
+      } catch (err) {
+        console.warn('API delete sync note:', err);
+        // 即使 API 失敗，也從本機移除（離線模式）
+        orders = orders.filter(o => {
+          const id = o.orderId || o.id;
+          if (isGhost) return !!id;
+          return id !== orderId && o.orderId !== orderId && o.id !== orderId;
+        });
+        localStorage.setItem('yougu_orders', JSON.stringify(orders));
+        updateStats();
+        renderOrders();
+      } finally {
+        // 釋放鎖定，允許輪詢恢復
+        isBusy = false;
       }
     }
 
