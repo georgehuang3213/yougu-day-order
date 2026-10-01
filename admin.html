@@ -527,12 +527,17 @@
             <div class="p-4 border-b border-stone-100 bg-stone-50/50">
               <div class="flex items-center justify-between mb-2">
                 <span class="font-mono font-bold text-xs bg-stone-200 text-stone-700 px-2 py-0.5 rounded">
-                  #${o.orderId || 'YG-ORDER'}
+                  #${o.orderId || o.id || 'YG-ORDER'}
                 </span>
-                <span class="px-2.5 py-0.5 rounded-full text-xs font-bold flex items-center space-x-1 ${statusInfo.class}">
-                  <i class="fas ${statusInfo.icon} text-[10px]"></i>
-                  <span>${statusInfo.label}</span>
-                </span>
+                <div class="flex items-center space-x-1.5">
+                  <span class="px-2.5 py-0.5 rounded-full text-xs font-bold flex items-center space-x-1 ${statusInfo.class}">
+                    <i class="fas ${statusInfo.icon} text-[10px]"></i>
+                    <span>${statusInfo.label}</span>
+                  </span>
+                  <button onclick="deleteOrder('${o.orderId || o.id}')" title="刪除此訂單" class="p-1 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded transition">
+                    <i class="fas fa-trash-alt text-xs"></i>
+                  </button>
+                </div>
               </div>
 
               <!-- Pickup Time Prominent -->
@@ -551,23 +556,23 @@
                 <div class="flex items-center space-x-2 font-medium text-stone-800">
                   <i class="fas fa-user text-stone-400"></i>
                   <span class="font-bold text-stone-900">${escapeHtml(o.customerName || '顧客')}</span>
-                  ${o.bringEcoBag ? '<span class="bg-emerald-100 text-emerald-800 text-[10px] px-1.5 py-0.2 rounded font-medium"><i class="fas fa-leaf mr-0.5"></i>自備環保袋</span>' : ''}
+                  ${o.bringEcoBag || o.needBag ? '<span class="bg-emerald-100 text-emerald-800 text-[10px] px-1.5 py-0.2 rounded font-medium"><i class="fas fa-leaf mr-0.5"></i>自備環保袋</span>' : ''}
                 </div>
-                <a href="tel:${o.customerPhone}" class="text-emerald-700 hover:text-emerald-900 font-bold flex items-center space-x-1 bg-emerald-50 px-2 py-0.5 rounded">
+                <a href="tel:${o.customerPhone || o.phone}" class="text-emerald-700 hover:text-emerald-900 font-bold flex items-center space-x-1 bg-emerald-50 px-2 py-0.5 rounded">
                   <i class="fas fa-phone-alt"></i>
-                  <span>${o.customerPhone || '未留電話'}</span>
+                  <span>${o.customerPhone || o.phone || '未留電話'}</span>
                 </a>
               </div>
 
               <div class="flex items-center justify-between text-stone-500 pt-0.5">
                 <span>付款方式：<b class="text-stone-700">${o.paymentMethod === 'linepay' ? 'LINE Pay Money' : '現場現金支付'}</b></span>
-                ${o.couponApplied ? '<span class="text-rose-600 font-semibold text-[11px]"><i class="fas fa-tag mr-0.5"></i>已用集點券</span>' : ''}
+                ${o.couponApplied || o.discountCode ? '<span class="text-rose-600 font-semibold text-[11px]"><i class="fas fa-tag mr-0.5"></i>已用集點券</span>' : ''}
               </div>
 
-              ${o.notes ? `
+              ${o.notes || o.note ? `
                 <div class="mt-2 bg-stone-100 p-2 rounded text-stone-700 text-[11px] flex items-start space-x-1.5">
                   <i class="fas fa-comment-dots text-stone-400 mt-0.5"></i>
-                  <p class="leading-snug break-all">${escapeHtml(o.notes)}</p>
+                  <p class="leading-snug break-all">${escapeHtml(o.notes || o.note)}</p>
                 </div>
               ` : ''}
             </div>
@@ -579,16 +584,16 @@
                 <div class="flex items-start justify-between pb-1.5 border-b border-dashed border-stone-200 last:border-none">
                   <div>
                     <div class="font-bold text-stone-800 flex items-center space-x-1.5">
-                      <span class="text-emerald-800">${item.quantity || 1}x</span>
+                      <span class="text-emerald-800">${item.quantity || item.qty || 1}x</span>
                       <span>${escapeHtml(item.name)}</span>
                     </div>
-                    ${item.addOns && item.addOns.length > 0 ? `
+                    ${(item.addOns && item.addOns.length > 0) || (item.options && item.options.length > 0) ? `
                       <div class="text-[11px] text-amber-700 pl-4 mt-0.5">
-                        加料: ${item.addOns.map(a => escapeHtml(a.name)).join(', ')}
+                        加料: ${(item.addOns ? item.addOns.map(a => escapeHtml(a.name || a)) : item.options.map(escapeHtml)).join(', ')}
                       </div>
                     ` : ''}
                   </div>
-                  <span class="text-stone-600 font-medium">$${item.subtotal || item.price}</span>
+                  <span class="text-stone-600 font-medium">$${item.subtotal || item.price * (item.quantity || item.qty || 1)}</span>
                 </div>
               `).join('')}
             </div>
@@ -597,27 +602,27 @@
             <div class="p-4 bg-stone-50 border-t border-stone-200">
               <div class="flex items-baseline justify-between mb-3">
                 <span class="text-xs text-stone-500">合計應收金額</span>
-                <span class="text-lg font-black text-emerald-900">$${o.finalTotal || o.totalAmount || 0}</span>
+                <span class="text-lg font-black text-emerald-900">$${o.finalTotal || o.totalAmount || o.total || 0}</span>
               </div>
 
               <!-- Quick Status Transitions -->
               <div class="grid grid-cols-2 gap-2 text-xs">
                 ${o.status === 'new' ? `
-                  <button onclick="updateStatus('${o.orderId}', 'preparing')" class="col-span-2 py-2 bg-emerald-800 hover:bg-emerald-700 text-white font-bold rounded-lg transition shadow-sm flex items-center justify-center space-x-1.5">
+                  <button onclick="updateStatus('${o.orderId || o.id}', 'preparing')" class="col-span-2 py-2 bg-emerald-800 hover:bg-emerald-700 text-white font-bold rounded-lg transition shadow-sm flex items-center justify-center space-x-1.5">
                     <i class="fas fa-check-circle"></i>
                     <span>接單並開始製作</span>
                   </button>
                 ` : ''}
 
                 ${o.status === 'preparing' ? `
-                  <button onclick="updateStatus('${o.orderId}', 'ready')" class="col-span-2 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition shadow-sm flex items-center justify-center space-x-1.5">
+                  <button onclick="updateStatus('${o.orderId || o.id}', 'ready')" class="col-span-2 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition shadow-sm flex items-center justify-center space-x-1.5">
                     <i class="fas fa-shopping-bag"></i>
                     <span>製作完成・待取餐</span>
                   </button>
                 ` : ''}
 
                 ${o.status === 'ready' ? `
-                  <button onclick="updateStatus('${o.orderId}', 'completed')" class="col-span-2 py-2 bg-stone-800 hover:bg-stone-900 text-white font-bold rounded-lg transition shadow-sm flex items-center justify-center space-x-1.5">
+                  <button onclick="updateStatus('${o.orderId || o.id}', 'completed')" class="col-span-2 py-2 bg-stone-800 hover:bg-stone-900 text-white font-bold rounded-lg transition shadow-sm flex items-center justify-center space-x-1.5">
                     <i class="fas fa-check-double"></i>
                     <span>顧客已取餐・結案</span>
                   </button>
@@ -630,19 +635,24 @@
                 ` : ''}
 
                 <!-- Secondary actions -->
-                <button onclick="copyOrderText('${o.orderId}')" class="py-1.5 px-2 bg-white hover:bg-stone-100 border border-stone-300 rounded text-stone-700 font-medium transition text-center flex items-center justify-center space-x-1">
+                <button onclick="copyOrderText('${o.orderId || o.id}')" class="py-1.5 px-2 bg-white hover:bg-stone-100 border border-stone-300 rounded text-stone-700 font-medium transition text-center flex items-center justify-center space-x-1">
                   <i class="fas fa-copy text-stone-400"></i>
                   <span>複製明細</span>
                 </button>
 
                 ${o.status !== 'cancelled' && o.status !== 'completed' ? `
-                  <button onclick="updateStatus('${o.orderId}', 'cancelled')" class="py-1.5 px-2 bg-white hover:bg-rose-50 border border-rose-200 text-rose-600 rounded font-medium transition text-center flex items-center justify-center space-x-1">
-                    <i class="fas fa-times"></i>
+                  <button onclick="updateStatus('${o.orderId || o.id}', 'cancelled')" class="py-1.5 px-2 bg-white hover:bg-rose-50 border border-rose-200 text-rose-600 rounded font-medium transition text-center flex items-center justify-center space-x-1">
+                    <i class="fas fa-ban"></i>
                     <span>取消此單</span>
                   </button>
+                  <button onclick="deleteOrder('${o.orderId || o.id}')" class="col-span-2 py-1 px-2 bg-white hover:bg-rose-50 border border-rose-200 text-rose-600 rounded text-center text-[11px] flex items-center justify-center space-x-1 transition">
+                    <i class="fas fa-trash-alt"></i>
+                    <span>刪除此訂單</span>
+                  </button>
                 ` : `
-                  <button onclick="deleteOrder('${o.orderId}')" class="py-1.5 px-2 bg-white hover:bg-rose-50 border border-stone-200 text-stone-400 hover:text-rose-600 rounded text-center">
-                    <i class="fas fa-trash-alt"></i> 刪除紀錄
+                  <button onclick="deleteOrder('${o.orderId || o.id}')" class="py-1.5 px-2 bg-white hover:bg-rose-50 border border-rose-200 text-rose-600 rounded text-center flex items-center justify-center space-x-1 transition">
+                    <i class="fas fa-trash-alt"></i>
+                    <span>刪除紀錄</span>
                   </button>
                 `}
               </div>
@@ -686,7 +696,7 @@
 
     // Delete single order
     async function deleteOrder(orderId) {
-      if (!confirm(`確定要刪除訂單 #${orderId} 嗎？`)) return;
+      if (!confirm(`確定要刪除訂單 #${orderId} 嗎？此動作將同步從雲端資料庫與本機移除。`)) return;
       orders = orders.filter(o => o.orderId !== orderId && o.id !== orderId);
       localStorage.setItem('yougu_orders', JSON.stringify(orders));
       updateStats();
@@ -695,7 +705,9 @@
       // Sync delete with Cloudflare R2
       try {
         await fetch(`/api/orders?id=${encodeURIComponent(orderId)}`, {
-          method: 'DELETE'
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: orderId, orderId: orderId })
         });
       } catch (err) {
         console.warn('API delete sync note:', err);
@@ -704,12 +716,12 @@
 
     // Copy order text formatted for sending in LINE
     function copyOrderText(orderId) {
-      const order = orders.find(o => o.orderId === orderId);
+      const order = orders.find(o => (o.orderId === orderId || o.id === orderId));
       if (!order) return;
 
       let itemsStr = "";
       (order.items || []).forEach((item, idx) => {
-        const itemNote = order.notes ? ` (${order.notes})` : '';
+        const itemNote = (order.notes || order.note) ? ` (${order.notes || order.note})` : '';
         itemsStr += `${idx + 1}. ${item.name}*${item.quantity || item.qty || 1}${idx === 0 && itemNote ? itemNote : ''}\n`;
       });
 
@@ -717,16 +729,16 @@
 
 請備註😊
 1. 訂購人：${order.customerName || ''}
-2. 聯絡電話：${order.customerPhone || ''}
+2. 聯絡電話：${order.customerPhone || order.phone || ''}
 3. 取餐日期：${order.pickupDate || ''}
 4. 取餐時間：${order.pickupTime || ''}
 5.餐點品項：
 請寫 (數量在品名後面*) (特殊需求請寫在品項後面)
 ${itemsStr}
 付款方式：${order.paymentMethod === 'linepay' ? 'LINE Pay Money' : '現金付款'}
-自備環保袋：${order.bringEcoBag ? '是' : '否'}
-${order.couponApplied ? `集點優惠：${order.couponApplied}\n` : ''}總金額：NT$ ${order.finalTotal || order.totalAmount || 0}
-${order.notes ? `備註：${order.notes}\n` : ''}
+自備環保袋：${order.bringEcoBag || order.needBag ? '是' : '否'}
+${order.couponApplied || order.discountCode ? `集點優惠：${order.couponApplied || order.discountCode}\n` : ''}總金額：NT$ ${order.finalTotal || order.totalAmount || order.total || 0}
+${order.notes || order.note ? `備註：${order.notes || order.note}\n` : ''}
 ‼️有回覆才算訂單完成✅`;
 
       navigator.clipboard.writeText(text).then(() => {
@@ -743,19 +755,19 @@ ${order.notes ? `備註：${order.notes}\n` : ''}
 
       let csv = "\uFEFF單號,下單時間,取餐日期,取餐時間,顧客姓名,電話,品項清單,合計金額,付款方式,狀態,備註\n";
       orders.forEach(o => {
-        const items = (o.items || []).map(i => `${i.name}x${i.quantity}`).join('; ');
+        const items = (o.items || []).map(i => `${i.name}x${i.quantity || i.qty || 1}`).join('; ');
         const row = [
-          o.orderId || '',
+          o.orderId || o.id || '',
           o.createdAt || '',
           o.pickupDate || '',
           o.pickupTime || '',
           `"${(o.customerName || '').replace(/"/g, '""')}"`,
-          `'${o.customerPhone || ''}`,
+          `'${o.customerPhone || o.phone || ''}`,
           `"${items.replace(/"/g, '""')}"`,
-          o.finalTotal || o.totalAmount || 0,
+          o.finalTotal || o.totalAmount || o.total || 0,
           o.paymentMethod || 'cash',
           o.status || '',
-          `"${(o.notes || '').replace(/"/g, '""')}"`
+          `"${(o.notes || o.note || '').replace(/"/g, '""')}"`
         ];
         csv += row.join(',') + "\n";
       });
@@ -770,12 +782,21 @@ ${order.notes ? `備註：${order.notes}\n` : ''}
     }
 
     // Clear demo orders
-    function clearDemoOrders() {
-      if (!confirm('確定要清空所有測試訂單資料嗎？')) return;
+    async function clearDemoOrders() {
+      if (!confirm('確定要清空所有訂單資料嗎？這將同時清空 Cloudflare R2 雲端儲存與本機紀錄！')) return;
       orders = [];
       localStorage.removeItem('yougu_orders');
       updateStats();
       renderOrders();
+
+      try {
+        await fetch('/api/orders?all=true', {
+          method: 'DELETE'
+        });
+        alert('所有訂單資料已成功清空！');
+      } catch (err) {
+        console.warn('清空雲端訂單失敗:', err);
+      }
     }
 
     // ==========================================

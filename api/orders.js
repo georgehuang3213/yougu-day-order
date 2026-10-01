@@ -286,25 +286,33 @@ export default async function handler(req, res) {
     }
   }
 
-  // DELETE: 刪除指定訂單
+  // DELETE: 刪除指定訂單或清空全部訂單
   if (req.method === "DELETE") {
     try {
-      const targetId = req.query?.id || req.body?.orderId || req.body?.id;
+      const parsedUrl = new URL(req.url || "", "http://localhost");
+      const isClearAll = req.query?.all === "true" || parsedUrl.searchParams.get("all") === "true";
+      const targetId = req.query?.id || parsedUrl.searchParams.get("id") || parsedUrl.searchParams.get("orderId") || req.body?.orderId || req.body?.id;
+
+      if (isClearAll) {
+        // 清空所有訂單
+        await saveOrders(r2Client, []);
+        return res.status(200).json({
+          success: true,
+          message: "已成功清空所有雲端與本機訂單資料",
+          storage: isR2Active ? "cloudflare-r2" : "memory-fallback"
+        });
+      }
+
       if (!targetId) {
         return res.status(400).json({ success: false, message: "缺少欲刪除的訂單編號" });
       }
 
       let orders = await loadOrders(r2Client);
-      const prevLength = orders.length;
-      orders = orders.filter(o => o.orderId !== targetId && o.id !== targetId);
+      const filtered = orders.filter(o => o.orderId !== targetId && o.id !== targetId);
 
-      if (orders.length === prevLength) {
-        return res.status(404).json({ success: false, message: `找不到訂單 #${targetId}` });
-      }
+      await saveOrders(r2Client, filtered);
 
-      await saveOrders(r2Client, orders);
-
-      // 若有 R2 連線，嘗試刪除單檔
+      // 若有 R2 連線，嘗試刪除單筆檔案備份
       if (r2Client) {
         try {
           await r2Client.send(new DeleteObjectCommand({
@@ -312,7 +320,7 @@ export default async function handler(req, res) {
             Key: `orders/${targetId}.json`
           }));
         } catch (e) {
-          console.warn("刪除單筆 R2 檔案失敗:", e);
+          console.warn("刪除單筆 R2 檔案備份失敗:", e);
         }
       }
 
