@@ -15,6 +15,57 @@
     .status-badge-ready { background-color: #E0E7FF; color: #4F46E5; border: 1px solid #A5B4FC; }
     .status-badge-completed { background-color: #D1FAE5; color: #059669; border: 1px solid #6EE7B7; }
     .status-badge-cancelled { background-color: #F3F4F6; color: #6B7280; border: 1px solid #E5E7EB; }
+
+    /* 列印專用樣式 */
+    .print-only { display: none; }
+    @media print {
+      body {
+        background: #fff !important;
+        color: #000 !important;
+        padding: 0 !important;
+        font-size: 12px;
+      }
+      header, footer, main, #loginModal, #changePwdModal, .no-print {
+        display: none !important;
+      }
+      #reportsModal {
+        position: static !important;
+        display: block !important;
+        background: #fff !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        overflow: visible !important;
+      }
+      #reportsModalContent {
+        box-shadow: none !important;
+        border: none !important;
+        max-width: 100% !important;
+        max-height: none !important;
+        width: 100% !important;
+        overflow: visible !important;
+        padding: 0 !important;
+      }
+      #printableReportArea {
+        display: block !important;
+        width: 100% !important;
+        padding: 0 !important;
+        color: #000 !important;
+      }
+      .print-only {
+        display: block !important;
+      }
+      table {
+        page-break-inside: auto;
+      }
+      tr {
+        page-break-inside: avoid;
+        page-break-after: auto;
+      }
+      @page {
+        margin: 1.2cm;
+        size: auto;
+      }
+    }
   </style>
 </head>
 <body class="bg-stone-100 min-h-screen text-stone-800 antialiased flex flex-col">
@@ -88,6 +139,243 @@
     </div>
   </div>
 
+  <!-- 營運報表與列印中心彈窗 -->
+  <div id="reportsModal" class="fixed inset-0 z-50 bg-stone-900/80 backdrop-blur-sm hidden flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
+    <div id="reportsModalContent" class="bg-white rounded-2xl shadow-2xl border border-stone-200 w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden my-auto">
+      
+      <!-- Modal Header (Screen Only) -->
+      <div class="p-4 sm:p-5 border-b border-stone-200 flex items-center justify-between bg-stone-50 no-print">
+        <div class="flex items-center space-x-2.5">
+          <div class="w-9 h-9 rounded-xl bg-emerald-800 text-white flex items-center justify-center text-base shadow-sm">
+            <i class="fas fa-chart-line"></i>
+          </div>
+          <div>
+            <h3 class="font-bold text-base text-stone-900">優穀日・營運統計與銷售報表</h3>
+            <p class="text-xs text-stone-500">即時營收結算、品項數量排行榜、顧客支付分析與紙本列印</p>
+          </div>
+        </div>
+        <div class="flex items-center space-x-2">
+          <button onclick="printReport()" class="px-3.5 py-1.5 bg-emerald-800 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center space-x-1.5 transition shadow-sm" title="列印或另存為 PDF">
+            <i class="fas fa-print"></i>
+            <span>列印報表</span>
+          </button>
+          <button onclick="exportReportCSV()" class="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-lg text-xs font-medium flex items-center space-x-1.5 transition border border-stone-200">
+            <i class="fas fa-download"></i>
+            <span class="hidden sm:inline">匯出此期 CSV</span>
+          </button>
+          <button onclick="closeReportsModal()" class="w-8 h-8 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-500 hover:text-stone-700 flex items-center justify-center transition">
+            <i class="fas fa-times text-sm"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Date Filter Bar (Screen Only) -->
+      <div class="px-4 sm:px-5 py-3 bg-stone-100/70 border-b border-stone-200 flex flex-wrap items-center justify-between gap-2.5 no-print text-xs">
+        <div class="flex flex-wrap items-center gap-1.5">
+          <span class="font-bold text-stone-600 mr-1"><i class="fas fa-calendar-alt text-emerald-700 mr-1"></i>期間快選：</span>
+          <button onclick="setReportPeriod('today')" id="rperiod-today" class="rperiod-btn px-2.5 py-1 rounded-md font-bold bg-emerald-800 text-white shadow-xs">今日</button>
+          <button onclick="setReportPeriod('yesterday')" id="rperiod-yesterday" class="rperiod-btn px-2.5 py-1 rounded-md font-medium bg-white text-stone-600 hover:bg-stone-200 border border-stone-200">昨日</button>
+          <button onclick="setReportPeriod('week')" id="rperiod-week" class="rperiod-btn px-2.5 py-1 rounded-md font-medium bg-white text-stone-600 hover:bg-stone-200 border border-stone-200">近 7 天</button>
+          <button onclick="setReportPeriod('month')" id="rperiod-month" class="rperiod-btn px-2.5 py-1 rounded-md font-medium bg-white text-stone-600 hover:bg-stone-200 border border-stone-200">近 30 天</button>
+          <button onclick="setReportPeriod('all')" id="rperiod-all" class="rperiod-btn px-2.5 py-1 rounded-md font-medium bg-white text-stone-600 hover:bg-stone-200 border border-stone-200">全部歷史</button>
+        </div>
+
+        <div class="flex items-center space-x-1.5">
+          <span class="text-stone-500 font-medium">自訂區間:</span>
+          <input type="date" id="repStartDate" class="px-2 py-1 bg-white border border-stone-300 rounded text-xs">
+          <span class="text-stone-400">~</span>
+          <input type="date" id="repEndDate" class="px-2 py-1 bg-white border border-stone-300 rounded text-xs">
+          <button onclick="applyCustomReportDates()" class="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-800 text-white font-medium rounded text-xs">查詢</button>
+        </div>
+      </div>
+
+      <!-- Printable Report Scrollable Body -->
+      <div id="printableReportArea" class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+        
+        <!-- Print Header (Visible in print or clean report) -->
+        <div class="border-b-2 border-stone-800 pb-4">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+              <img src="images/logo.png" alt="Logo" class="w-12 h-12 object-contain rounded-full border border-stone-300 p-0.5">
+              <div>
+                <h1 class="text-xl sm:text-2xl font-black text-stone-900 tracking-wide">優穀日・Homemade Yogurt Bowl</h1>
+                <p class="text-xs text-stone-600 font-semibold">100% 無加糖鮮奶優格專賣店 ‧ 營運結算與銷售明細報表</p>
+              </div>
+            </div>
+            <div class="text-right text-xs text-stone-500 space-y-0.5">
+              <p>統計期間：<b id="repPeriodDisplay" class="text-stone-900">今日</b></p>
+              <p>製表時間：<span id="repGenTime"></span></p>
+              <p>製表人：<span class="font-bold text-stone-700">店長 (admin)</span></p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4 KPI Summary Cards -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div class="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3.5">
+            <p class="text-xs font-bold text-emerald-900 mb-1 flex items-center justify-between">
+              <span>實收營業總額</span>
+              <i class="fas fa-coins text-emerald-700"></i>
+            </p>
+            <p id="repNetRevenue" class="text-2xl font-black text-emerald-800">$0</p>
+            <p class="text-[11px] text-emerald-700 mt-1">原始金額: <span id="repGrossRevenue">$0</span></p>
+          </div>
+
+          <div class="bg-amber-50/70 border border-amber-200 rounded-xl p-3.5">
+            <p class="text-xs font-bold text-amber-900 mb-1 flex items-center justify-between">
+              <span>優格碗銷售總杯數</span>
+              <i class="fas fa-bowl-rice text-amber-700"></i>
+            </p>
+            <p id="repTotalCups" class="text-2xl font-black text-amber-800">0 <span class="text-xs font-normal">杯</span></p>
+            <p class="text-[11px] text-amber-700 mt-1">加購配料: <span id="repTotalAddons">0</span> 份</p>
+          </div>
+
+          <div class="bg-blue-50/70 border border-blue-200 rounded-xl p-3.5">
+            <p class="text-xs font-bold text-blue-900 mb-1 flex items-center justify-between">
+              <span>有效訂單總筆數</span>
+              <i class="fas fa-receipt text-blue-700"></i>
+            </p>
+            <p id="repTotalOrders" class="text-2xl font-black text-blue-800">0 <span class="text-xs font-normal">筆</span></p>
+            <p class="text-[11px] text-blue-700 mt-1">已完成結案: <span id="repCompletedOrders">0</span> 筆</p>
+          </div>
+
+          <div class="bg-purple-50/70 border border-purple-200 rounded-xl p-3.5">
+            <p class="text-xs font-bold text-purple-900 mb-1 flex items-center justify-between">
+              <span>平均客單價 (AOV)</span>
+              <i class="fas fa-calculator text-purple-700"></i>
+            </p>
+            <p id="repAverageOrder" class="text-2xl font-black text-purple-800">$0</p>
+            <p class="text-[11px] text-purple-700 mt-1">自備環保袋: <span id="repEcoBagCustomers">0</span> 位</p>
+          </div>
+        </div>
+
+        <!-- Payment & Discounts Breakdown -->
+        <div class="bg-stone-50 border border-stone-200 rounded-xl p-4">
+          <h4 class="text-xs font-bold text-stone-700 uppercase tracking-wider mb-3 flex items-center space-x-1.5">
+            <i class="fas fa-credit-card text-emerald-700"></i>
+            <span>收款管道與行銷折抵分析</span>
+          </h4>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+            <div class="bg-white p-3 rounded-lg border border-stone-200 flex items-center justify-between">
+              <div>
+                <span class="text-stone-500">現場現金支付</span>
+                <p id="repCashAmount" class="text-base font-bold text-stone-800 mt-0.5">$0</p>
+              </div>
+              <span id="repCashCount" class="text-xs bg-stone-100 text-stone-600 px-2 py-1 rounded font-medium">0 筆 (0%)</span>
+            </div>
+
+            <div class="bg-white p-3 rounded-lg border border-stone-200 flex items-center justify-between">
+              <div>
+                <span class="text-stone-500">LINE Pay Money</span>
+                <p id="repLinePayAmount" class="text-base font-bold text-emerald-800 mt-0.5">$0</p>
+              </div>
+              <span id="repLinePayCount" class="text-xs bg-emerald-50 text-emerald-700 px-2 py-1 rounded font-medium">0 筆 (0%)</span>
+            </div>
+
+            <div class="bg-white p-3 rounded-lg border border-stone-200 flex items-center justify-between">
+              <div>
+                <span class="text-stone-500">集點券折抵優惠</span>
+                <p id="repDiscountTotal" class="text-base font-bold text-rose-600 mt-0.5">- $0</p>
+              </div>
+              <span id="repDiscountCount" class="text-xs bg-rose-50 text-rose-700 px-2 py-1 rounded font-medium">0 筆</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Product Sales Ranking Table -->
+        <div>
+          <div class="flex items-center justify-between mb-2.5">
+            <h4 class="text-sm font-bold text-stone-800 flex items-center space-x-2">
+              <i class="fas fa-ranking-star text-amber-500"></i>
+              <span>餐點品項銷售數量與金額排行</span>
+            </h4>
+            <span class="text-xs text-stone-400">共售出 <span id="repUniqueItemsCount" class="font-bold text-stone-700">0</span> 種品項</span>
+          </div>
+
+          <div class="border border-stone-200 rounded-xl overflow-hidden bg-white">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-stone-100 text-stone-600 font-bold border-b border-stone-200">
+                <tr>
+                  <th class="py-2.5 px-3 w-12 text-center">排名</th>
+                  <th class="py-2.5 px-4">餐點品項名稱</th>
+                  <th class="py-2.5 px-3 text-right">單價</th>
+                  <th class="py-2.5 px-3 text-right">銷售數量</th>
+                  <th class="py-2.5 px-4 text-right">銷售總額</th>
+                  <th class="py-2.5 px-4 w-36">營收佔比</th>
+                </tr>
+              </thead>
+              <tbody id="repItemsTableBody" class="divide-y divide-stone-100">
+                <!-- Dynamic product rows -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Add-ons Breakdown -->
+        <div id="repAddonsSection">
+          <h4 class="text-sm font-bold text-stone-800 mb-2.5 flex items-center space-x-2">
+            <i class="fas fa-layer-group text-emerald-700"></i>
+            <span>客製加料與配料銷售統計</span>
+          </h4>
+          <div id="repAddonsGrid" class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+            <!-- Dynamic addons cards -->
+          </div>
+        </div>
+
+        <!-- Detailed Transactions List -->
+        <div>
+          <div class="flex items-center justify-between mb-2.5">
+            <h4 class="text-sm font-bold text-stone-800 flex items-center space-x-2">
+              <i class="fas fa-list text-stone-600"></i>
+              <span>此期訂單流水明細對帳表</span>
+            </h4>
+            <span class="text-xs text-stone-500">共 <span id="repOrderListCount" class="font-bold text-stone-800">0</span> 筆訂單</span>
+          </div>
+
+          <div class="border border-stone-200 rounded-xl overflow-hidden bg-white">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-stone-100 text-stone-600 font-bold border-b border-stone-200">
+                <tr>
+                  <th class="py-2.5 px-3">單號</th>
+                  <th class="py-2.5 px-3">下單時間</th>
+                  <th class="py-2.5 px-3">預約取餐</th>
+                  <th class="py-2.5 px-3">顧客姓名</th>
+                  <th class="py-2.5 px-4">訂購品項</th>
+                  <th class="py-2.5 px-3">付款方式</th>
+                  <th class="py-2.5 px-3">狀態</th>
+                  <th class="py-2.5 px-3 text-right">實收金額</th>
+                </tr>
+              </thead>
+              <tbody id="repOrdersTableBody" class="divide-y divide-stone-100">
+                <!-- Dynamic order rows -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Sign-off & Footer (For Print only) -->
+        <div class="print-only pt-8 border-t border-stone-300 mt-8 text-xs text-stone-700">
+          <div class="grid grid-cols-3 gap-6 text-center">
+            <div>
+              <p class="font-bold mb-8">製表人簽名：</p>
+              <div class="border-b border-stone-400 mx-6"></div>
+            </div>
+            <div>
+              <p class="font-bold mb-8">店長審核簽章：</p>
+              <div class="border-b border-stone-400 mx-6"></div>
+            </div>
+            <div>
+              <p class="font-bold mb-8">對帳日期：</p>
+              <div class="border-b border-stone-400 mx-6"></div>
+            </div>
+          </div>
+          <p class="text-center text-[10px] text-stone-400 mt-6">優穀日 Homemade Yogurt Bowl ・ 內部營運專用報表 ・ 列印時間：<span id="repPrintFooterTime"></span></p>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
   <!-- Header -->
   <header class="bg-emerald-900 text-white shadow-md sticky top-0 z-30">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between">
@@ -120,6 +408,12 @@
         <button onclick="openChangePasswordModal()" class="flex items-center space-x-1 px-2.5 sm:px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-800 hover:bg-emerald-700 text-emerald-100 transition shadow-sm" title="修改店長密碼">
           <i class="fas fa-key text-amber-300"></i>
           <span class="hidden sm:inline">改密碼</span>
+        </button>
+
+        <!-- Reports button -->
+        <button onclick="openReportsModal()" class="flex items-center space-x-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-bold rounded-lg bg-amber-400 hover:bg-amber-300 text-stone-900 transition shadow-sm" title="開啟營收統計與銷售報表，支援紙本列印">
+          <i class="fas fa-chart-pie text-emerald-950"></i>
+          <span>營運報表</span>
         </button>
 
         <!-- Customer site link -->
@@ -172,13 +466,17 @@
         </div>
       </div>
 
-      <div class="bg-white p-4 rounded-xl shadow-sm border border-stone-200 flex items-center justify-between">
+      <div onclick="openReportsModal()" class="bg-white p-4 rounded-xl shadow-sm border border-stone-200 hover:border-emerald-500 hover:shadow-md transition cursor-pointer flex items-center justify-between group" title="點擊開啟營運報表">
         <div>
-          <p class="text-xs text-stone-500 font-medium">今日累計營業額</p>
+          <div class="flex items-center space-x-1.5">
+            <p class="text-xs text-stone-500 font-medium">今日營業額</p>
+            <span class="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.2 rounded group-hover:bg-emerald-800 group-hover:text-white transition">報表 ➔</span>
+          </div>
           <p id="statTodayRevenue" class="text-2xl font-bold text-emerald-800">$0</p>
+          <p class="text-[11px] text-stone-400 mt-0.5">全期累計: <span id="statAllTimeRevenue" class="font-bold text-stone-700">$0</span></p>
         </div>
-        <div class="w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-700 text-lg">
-          <i class="fas fa-coins"></i>
+        <div class="w-10 h-10 rounded-full bg-emerald-50 group-hover:bg-emerald-100 flex items-center justify-center text-emerald-700 text-lg transition">
+          <i class="fas fa-chart-line"></i>
         </div>
       </div>
     </div>
@@ -223,8 +521,12 @@
         </button>
       </div>
 
-      <!-- Action buttons: Export CSV, Clear mock -->
+      <!-- Action buttons: Reports, Export CSV, Clear mock -->
       <div class="flex items-center space-x-2 self-end md:self-auto">
+        <button onclick="openReportsModal()" class="px-3 py-1.5 bg-emerald-800 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center space-x-1.5 transition shadow-sm">
+          <i class="fas fa-chart-pie"></i>
+          <span>營運報表 / 列印</span>
+        </button>
         <button onclick="exportCSV()" class="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-lg text-xs font-medium flex items-center space-x-1.5 transition">
           <i class="fas fa-file-excel text-emerald-700"></i>
           <span>匯出訂單 CSV</span>
@@ -436,8 +738,15 @@
 
       // Calculate revenue (excluding cancelled)
       const validOrders = orders.filter(o => o.status !== 'cancelled');
-      const todayTotal = validOrders.reduce((sum, o) => sum + (o.finalTotal || o.totalAmount || 0), 0);
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const todayOrders = validOrders.filter(o => (o.pickupDate === todayStr || (o.createdAt && o.createdAt.slice(0, 10) === todayStr)));
+      
+      const todayTotal = todayOrders.reduce((sum, o) => sum + (o.finalTotal || o.totalAmount || o.total || 0), 0);
+      const allTotal = validOrders.reduce((sum, o) => sum + (o.finalTotal || o.totalAmount || o.total || 0), 0);
+
       document.getElementById('statTodayRevenue').innerText = `$${todayTotal.toLocaleString()}`;
+      const allElem = document.getElementById('statAllTimeRevenue');
+      if (allElem) allElem.innerText = `$${allTotal.toLocaleString()}`;
 
       // Update Ingredient prep summary
       updatePrepSummary(validOrders);
@@ -1024,6 +1333,326 @@ ${order.notes || order.note ? `備註：${order.notes || order.note}\n` : ''}
 
       alert("密碼已透過 SHA-256 加密完成更新！");
       closeChangePasswordModal();
+    }
+
+    // ==========================================
+    // 營運統計與報表中心邏輯 (含列印與匯出)
+    // ==========================================
+    let currentReportPeriod = 'today';
+    let reportFilteredOrders = [];
+
+    function openReportsModal() {
+      const modal = document.getElementById('reportsModal');
+      if (!modal) return;
+      modal.classList.remove('hidden');
+      
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const startInp = document.getElementById('repStartDate');
+      const endInp = document.getElementById('repEndDate');
+      if (startInp && !startInp.value) startInp.value = todayStr;
+      if (endInp && !endInp.value) endInp.value = todayStr;
+
+      setReportPeriod(currentReportPeriod || 'today');
+    }
+
+    function closeReportsModal() {
+      const modal = document.getElementById('reportsModal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    function setReportPeriod(period) {
+      currentReportPeriod = period;
+      document.querySelectorAll('.rperiod-btn').forEach(btn => {
+        btn.className = 'rperiod-btn px-2.5 py-1 rounded-md font-medium bg-white text-stone-600 hover:bg-stone-200 border border-stone-200';
+      });
+
+      const activeBtn = document.getElementById(`rperiod-${period}`);
+      if (activeBtn) {
+        activeBtn.className = 'rperiod-btn px-2.5 py-1 rounded-md font-bold bg-emerald-800 text-white shadow-xs';
+      }
+
+      const now = new Date();
+      const todayStr = now.toISOString().slice(0, 10);
+
+      const startInp = document.getElementById('repStartDate');
+      const endInp = document.getElementById('repEndDate');
+
+      if (period === 'today') {
+        startInp.value = todayStr;
+        endInp.value = todayStr;
+        document.getElementById('repPeriodDisplay').innerText = `今日 (${todayStr})`;
+      } else if (period === 'yesterday') {
+        const y = new Date(now.getTime() - 86400000).toISOString().slice(0, 10);
+        startInp.value = y;
+        endInp.value = y;
+        document.getElementById('repPeriodDisplay').innerText = `昨日 (${y})`;
+      } else if (period === 'week') {
+        const w = new Date(now.getTime() - 6 * 86400000).toISOString().slice(0, 10);
+        startInp.value = w;
+        endInp.value = todayStr;
+        document.getElementById('repPeriodDisplay').innerText = `近 7 天 (${w} ~ ${todayStr})`;
+      } else if (period === 'month') {
+        const m = new Date(now.getTime() - 29 * 86400000).toISOString().slice(0, 10);
+        startInp.value = m;
+        endInp.value = todayStr;
+        document.getElementById('repPeriodDisplay').innerText = `近 30 天 (${m} ~ ${todayStr})`;
+      } else if (period === 'all') {
+        startInp.value = '2026-01-01';
+        endInp.value = todayStr;
+        document.getElementById('repPeriodDisplay').innerText = `全部歷史營運資料`;
+      }
+
+      calculateAndRenderReport();
+    }
+
+    function applyCustomReportDates() {
+      const s = document.getElementById('repStartDate').value;
+      const e = document.getElementById('repEndDate').value;
+      if (!s || !e) {
+        alert('請選擇完整的開始與結束日期！');
+        return;
+      }
+      document.querySelectorAll('.rperiod-btn').forEach(btn => {
+        btn.className = 'rperiod-btn px-2.5 py-1 rounded-md font-medium bg-white text-stone-600 hover:bg-stone-200 border border-stone-200';
+      });
+      document.getElementById('repPeriodDisplay').innerText = `自訂區間 (${s} ~ ${e})`;
+      currentReportPeriod = 'custom';
+      calculateAndRenderReport();
+    }
+
+    function calculateAndRenderReport() {
+      const s = document.getElementById('repStartDate').value;
+      const e = document.getElementById('repEndDate').value;
+
+      // Filter orders by date range (pickupDate or createdAt)
+      reportFilteredOrders = orders.filter(o => {
+        const orderDate = (o.pickupDate || (o.createdAt ? o.createdAt.slice(0, 10) : '')).slice(0, 10);
+        if (!orderDate) return true;
+        if (s && orderDate < s) return false;
+        if (e && orderDate > e) return false;
+        return true;
+      });
+
+      // Filter valid (non-cancelled) orders for revenue and products
+      const validOrders = reportFilteredOrders.filter(o => o.status !== 'cancelled');
+      const completedOrders = validOrders.filter(o => o.status === 'completed');
+      const cancelledOrders = reportFilteredOrders.filter(o => o.status === 'cancelled');
+
+      let grossRevenue = 0;
+      let discountTotal = 0;
+      let netRevenue = 0;
+      let totalCups = 0;
+      let totalAddons = 0;
+      let ecoBagCount = 0;
+      let discountCount = 0;
+      let cashAmount = 0;
+      let cashCount = 0;
+      let linePayAmount = 0;
+      let linePayCount = 0;
+
+      const productMap = {}; // name -> { name, price, qty, total }
+      const addonsMap = {}; // name -> qty
+
+      validOrders.forEach(o => {
+        const sub = Number(o.subtotal) || 0;
+        const disc = Number(o.discountAmount) || 0;
+        const finalTot = Number(o.finalTotal || o.totalAmount || o.total) || Math.max(0, sub - disc);
+
+        grossRevenue += sub;
+        discountTotal += disc;
+        netRevenue += finalTot;
+
+        if (disc > 0 || o.couponApplied || o.discountCode) discountCount++;
+        if (o.bringEcoBag || o.needBag) ecoBagCount++;
+
+        if (o.paymentMethod === 'linepay') {
+          linePayAmount += finalTot;
+          linePayCount++;
+        } else {
+          cashAmount += finalTot;
+          cashCount++;
+        }
+
+        (o.items || []).forEach(item => {
+          const q = Number(item.quantity || item.qty) || 1;
+          const p = Number(item.price) || 0;
+          const name = item.name || '優格碗';
+          totalCups += q;
+
+          if (!productMap[name]) {
+            productMap[name] = { name, price: p, qty: 0, total: 0 };
+          }
+          productMap[name].qty += q;
+          productMap[name].total += (p * q);
+
+          // Add-ons
+          if (item.addOns && item.addOns.length > 0) {
+            item.addOns.forEach(a => {
+              const aName = a.name || a;
+              totalAddons += q;
+              addonsMap[aName] = (addonsMap[aName] || 0) + q;
+            });
+          } else if (item.options && item.options.length > 0) {
+            item.options.forEach(opt => {
+              totalAddons += q;
+              addonsMap[opt] = (addonsMap[opt] || 0) + q;
+            });
+          }
+        });
+      });
+
+      const avgOrder = validOrders.length > 0 ? Math.round(netRevenue / validOrders.length) : 0;
+
+      // Update KPI Cards
+      document.getElementById('repNetRevenue').innerText = `$${netRevenue.toLocaleString()}`;
+      document.getElementById('repGrossRevenue').innerText = `$${grossRevenue.toLocaleString()}`;
+      document.getElementById('repTotalCups').innerHTML = `${totalCups} <span class="text-xs font-normal">杯</span>`;
+      document.getElementById('repTotalAddons').innerText = totalAddons;
+      document.getElementById('repTotalOrders').innerHTML = `${validOrders.length} <span class="text-xs font-normal">筆</span>`;
+      document.getElementById('repCompletedOrders').innerText = completedOrders.length;
+      document.getElementById('repAverageOrder').innerText = `$${avgOrder.toLocaleString()}`;
+      document.getElementById('repEcoBagCustomers').innerText = ecoBagCount;
+
+      // Payment analysis
+      const totalPayCount = cashCount + linePayCount;
+      const cashPercent = totalPayCount > 0 ? Math.round((cashCount / totalPayCount) * 100) : 0;
+      const linePayPercent = totalPayCount > 0 ? Math.round((linePayCount / totalPayCount) * 100) : 0;
+
+      document.getElementById('repCashAmount').innerText = `$${cashAmount.toLocaleString()}`;
+      document.getElementById('repCashCount').innerText = `${cashCount} 筆 (${cashPercent}%)`;
+      document.getElementById('repLinePayAmount').innerText = `$${linePayAmount.toLocaleString()}`;
+      document.getElementById('repLinePayCount').innerText = `${linePayCount} 筆 (${linePayPercent}%)`;
+      document.getElementById('repDiscountTotal').innerText = `- $${discountTotal.toLocaleString()}`;
+      document.getElementById('repDiscountCount').innerText = `${discountCount} 筆折抵`;
+
+      // Product Ranking
+      const sortedProducts = Object.values(productMap).sort((a, b) => b.qty - a.qty || b.total - a.total);
+      document.getElementById('repUniqueItemsCount').innerText = sortedProducts.length;
+
+      const pTableBody = document.getElementById('repItemsTableBody');
+      if (sortedProducts.length === 0) {
+        pTableBody.innerHTML = `<tr><td colspan="6" class="text-center py-6 text-stone-400">此統計期間內尚無餐點銷售紀錄</td></tr>`;
+      } else {
+        pTableBody.innerHTML = sortedProducts.map((p, idx) => {
+          const percent = netRevenue > 0 ? Math.min(100, Math.round((p.total / netRevenue) * 100)) : 0;
+          return `
+            <tr class="hover:bg-stone-50">
+              <td class="py-2.5 px-3 text-center font-bold text-stone-500">#${idx + 1}</td>
+              <td class="py-2.5 px-4 font-bold text-stone-800">${escapeHtml(p.name)}</td>
+              <td class="py-2.5 px-3 text-right text-stone-500 font-mono">$${p.price}</td>
+              <td class="py-2.5 px-3 text-right font-black text-emerald-800 text-sm">${p.qty} <span class="text-xs font-normal text-stone-400">份</span></td>
+              <td class="py-2.5 px-4 text-right font-black text-stone-800 font-mono">$${p.total.toLocaleString()}</td>
+              <td class="py-2.5 px-4">
+                <div class="flex items-center space-x-2">
+                  <div class="flex-1 bg-stone-100 rounded-full h-2 overflow-hidden">
+                    <div class="bg-emerald-600 h-2 rounded-full" style="width: ${percent}%"></div>
+                  </div>
+                  <span class="text-[11px] text-stone-500 font-mono w-9 text-right">${percent}%</span>
+                </div>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      }
+
+      // Add-ons grid
+      const addonsEntries = Object.entries(addonsMap);
+      const addonsGrid = document.getElementById('repAddonsGrid');
+      const addonsSection = document.getElementById('repAddonsSection');
+      if (addonsEntries.length === 0) {
+        addonsSection.classList.add('hidden');
+      } else {
+        addonsSection.classList.remove('hidden');
+        addonsGrid.innerHTML = addonsEntries.map(([name, count]) => `
+          <div class="bg-amber-50/60 border border-amber-200 p-2.5 rounded-lg flex items-center justify-between">
+            <span class="font-medium text-amber-900">${escapeHtml(name)}</span>
+            <span class="font-bold text-amber-800 text-sm">${count} <span class="text-[11px] font-normal text-stone-500">份</span></span>
+          </div>
+        `).join('');
+      }
+
+      // Order Ledger
+      document.getElementById('repOrderListCount').innerText = reportFilteredOrders.length;
+      const oTableBody = document.getElementById('repOrdersTableBody');
+      if (reportFilteredOrders.length === 0) {
+        oTableBody.innerHTML = `<tr><td colspan="8" class="text-center py-6 text-stone-400">此期間內尚無訂單紀錄</td></tr>`;
+      } else {
+        oTableBody.innerHTML = reportFilteredOrders.map(o => {
+          const statusLabels = {
+            'new': '<span class="text-rose-600 font-bold">新訂單</span>',
+            'preparing': '<span class="text-amber-600 font-bold">製作中</span>',
+            'ready': '<span class="text-indigo-600 font-bold">待取餐</span>',
+            'completed': '<span class="text-emerald-700 font-bold">已結案</span>',
+            'cancelled': '<span class="text-stone-400 line-through">已取消</span>'
+          };
+          const stHtml = statusLabels[o.status] || o.status;
+          const itemsSummary = (o.items || []).map(i => `${i.name} × ${i.quantity || i.qty || 1}`).join('、 ');
+          const timeStr = o.createdAt ? new Date(o.createdAt).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' }) : '';
+          const dateStr = o.createdAt ? new Date(o.createdAt).toLocaleDateString('zh-TW', { month: '2-digit', day: '2-digit' }) : '';
+
+          return `
+            <tr class="hover:bg-stone-50 ${o.status === 'cancelled' ? 'opacity-50 bg-stone-50/50' : ''}">
+              <td class="py-2.5 px-3 font-mono font-bold text-xs text-stone-700">#${o.orderId || o.id}</td>
+              <td class="py-2.5 px-3 text-stone-500 text-[11px]">${dateStr} ${timeStr}</td>
+              <td class="py-2.5 px-3 text-stone-800 font-medium">${o.pickupDate || ''} ${o.pickupTime || ''}</td>
+              <td class="py-2.5 px-3 font-bold text-stone-800">${escapeHtml(o.customerName || '')}</td>
+              <td class="py-2.5 px-4 text-stone-600 truncate max-w-xs" title="${escapeHtml(itemsSummary)}">${escapeHtml(itemsSummary)}</td>
+              <td class="py-2.5 px-3 text-stone-600">${o.paymentMethod === 'linepay' ? 'LINE Pay' : '現金'}</td>
+              <td class="py-2.5 px-3">${stHtml}</td>
+              <td class="py-2.5 px-3 text-right font-black font-mono ${o.status === 'cancelled' ? 'line-through text-stone-400' : 'text-stone-900'}">$${(o.finalTotal || o.totalAmount || o.total || 0).toLocaleString()}</td>
+            </tr>
+          `;
+        }).join('');
+      }
+
+      // Update timestamps
+      const nowStr = new Date().toLocaleString('zh-TW', { hour12: false });
+      document.getElementById('repGenTime').innerText = nowStr;
+      const footerElem = document.getElementById('repPrintFooterTime');
+      if (footerElem) footerElem.innerText = nowStr;
+    }
+
+    function printReport() {
+      // 確保報表內容已更新
+      calculateAndRenderReport();
+      window.print();
+    }
+
+    function exportReportCSV() {
+      if (!reportFilteredOrders || reportFilteredOrders.length === 0) {
+        alert('此統計區間無訂單資料可匯出');
+        return;
+      }
+
+      let csv = "\uFEFF單號,下單時間,取餐日期,取餐時間,顧客姓名,電話,餐點品項明細,付款方式,狀態,實收金額,自備環保袋,折扣優惠,備註\n";
+      reportFilteredOrders.forEach(o => {
+        const items = (o.items || []).map(i => `${i.name}x${i.quantity || i.qty || 1}`).join('; ');
+        const row = [
+          o.orderId || o.id || '',
+          o.createdAt || '',
+          o.pickupDate || '',
+          o.pickupTime || '',
+          `"${(o.customerName || '').replace(/"/g, '""')}"`,
+          `'${o.customerPhone || o.phone || ''}`,
+          `"${items.replace(/"/g, '""')}"`,
+          o.paymentMethod === 'linepay' ? 'LINE Pay' : '現金付款',
+          o.status || '',
+          o.finalTotal || o.totalAmount || o.total || 0,
+          o.bringEcoBag || o.needBag ? '是' : '否',
+          `"${(o.couponApplied || o.discountCode || '').replace(/"/g, '""')}"`,
+          `"${(o.notes || o.note || '').replace(/"/g, '""')}"`
+        ];
+        csv += row.join(',') + "\n";
+      });
+
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const periodName = document.getElementById('repPeriodDisplay').innerText.replace(/[\s\(\)\~\/]/g, '_');
+      a.download = `優穀日_營運銷售報表_${periodName}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
     }
 
     // Initialize
