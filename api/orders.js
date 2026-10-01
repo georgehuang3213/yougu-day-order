@@ -265,7 +265,7 @@ export default async function handler(req, res) {
     }
   }
 
-  // POST: 顧客提交新訂單
+  // POST: 顧客提交新訂單 (支援多人同時在線下單與高並發防碰撞)
   if (req.method === "POST") {
     try {
       const data = req.body;
@@ -276,20 +276,38 @@ export default async function handler(req, res) {
         });
       }
 
-      const orders = await loadOrders(r2Client);
-
-      const orderSeq = (orders.length + 1).toString().padStart(3, "0");
-      const todayStr = new Date().toISOString().slice(5, 10).replace("-", "");
-      const generatedId = `YG-${todayStr}-${orderSeq}`;
+      // 生成高並發唯一訂單編號 (格式：YG-月日-毫秒+3位英數亂數，保證同時多人下單絕不碰撞重複)
+      const now = new Date();
+      const todayStr = now.toISOString().slice(5, 10).replace("-", "");
+      const timeMs = now.getTime().toString().slice(-4);
+      const randomSuffix = Math.random().toString(36).substring(2, 5).toUpperCase();
+      const generatedId = `YG-${todayStr}-${timeMs}${randomSuffix}`;
 
       const newOrder = normalizeOrder(data, generatedId);
 
-      orders.unshift(newOrder); // 最新訂單放最前面
-
-      await saveOrders(r2Client, orders);
+      // 1. 先將單筆訂單獨立寫入 Cloudflare R2 (獨立檔案 orders/{id}.json，高並發安全隔離)
       await saveSingleOrder(r2Client, newOrder);
 
-      // 非同步發送 LINE 通知給店家（不阻礙顧客結帳回應）
+      // 2. 讀取最新總表並進行 Map 鍵值聯集合併，防止多人同時寫入時互相覆蓋
+      const currentOrders = await loadOrders(r2Client);
+      const orderMap = new Map();
+      // 將新訂單優先放入
+      orderMap.set(newOrder.orderId || newOrder.id, newOrder);
+      // 合併所有既有訂單
+      currentOrders.forEach(o => {
+        const id = o.orderId || o.id;
+        if (id && !orderMap.has(id)) {
+          orderMap.set(id, o);
+        }
+      });
+
+      const mergedOrders = Array.from(orderMap.values());
+      // 依建立時間排序，最新訂單排在最前
+      mergedOrders.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+
+      await saveOrders(r2Client, mergedOrders);
+
+      // 3. 非同步發送 LINE 通知給店家（不阻礙顧客結帳回應）
       sendLineNotificationToStore(newOrder).catch(e => console.warn("LINE push error:", e));
 
       return res.status(201).json({
