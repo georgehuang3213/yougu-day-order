@@ -629,8 +629,20 @@
       }
 
       // 2. 本地儲存備份訂單
+      const generatedId = `YG-${Date.now().toString().slice(-4)}`;
       const localOrders = JSON.parse(localStorage.getItem('yougu_orders') || '[]');
-      localOrders.unshift({ ...orderPayload, id: `YG-${Date.now().toString().slice(-4)}`, createdAt: new Date().toISOString() });
+      localOrders.unshift({
+        ...orderPayload,
+        id: generatedId,
+        orderId: generatedId,
+        customerPhone: phone,
+        bringEcoBag: needBag,
+        couponApplied: discountName,
+        finalTotal: finalTotal,
+        notes: note,
+        status: 'new',
+        createdAt: new Date().toISOString()
+      });
       localStorage.setItem('yougu_orders', JSON.stringify(localOrders));
 
       // 3. 生成與店家日常習慣 100% 完全相符的 LINE 官方訂單格式

@@ -358,48 +358,52 @@
       renderOrders();
     }
 
-    // Fetch orders from API + sync with localStorage backup
+    // Fetch orders from API (Cloudflare R2 as Single Source of Truth)
     async function fetchOrders(isManual = false) {
       const refreshIcon = document.getElementById('refreshIcon');
       if (refreshIcon && isManual) refreshIcon.classList.add('fa-spin');
 
+      let isRemoteSuccess = false;
       let remoteOrders = [];
+
       try {
         const res = await fetch('/api/orders');
         if (res.ok) {
           const data = await res.json();
-          if (data && data.orders) {
+          if (data && Array.isArray(data.orders)) {
             remoteOrders = data.orders;
+            isRemoteSuccess = true;
           }
         }
       } catch (err) {
-        console.warn('API fetch offline or local fallback:', err);
+        console.warn('API fetch offline, using local fallback:', err);
       }
 
-      // Merge with localStorage
-      let localOrders = [];
-      try {
-        const stored = localStorage.getItem('yougu_orders');
-        if (stored) localOrders = JSON.parse(stored);
-      } catch (e) {}
+      if (isRemoteSuccess) {
+        // 雲端連線成功：以 Cloudflare R2 為準，並更新本機快取
+        orders = remoteOrders;
+        localStorage.setItem('yougu_orders', JSON.stringify(remoteOrders));
+      } else {
+        // 離線備援：僅在無法連線後端時讀取本機快取
+        try {
+          const stored = localStorage.getItem('yougu_orders');
+          if (stored) orders = JSON.parse(stored);
+        } catch (e) {}
+      }
 
-      // Combine by unique orderId
-      const map = new Map();
-      localOrders.forEach(o => { const key = o.orderId || o.id; if (key) map.set(key, o); });
-      remoteOrders.forEach(o => { const key = o.orderId || o.id; if (key) map.set(key, o); }); // remote updates win
+      // 確保所有訂單皆具備合法單號與屬性
+      orders = (orders || []).filter(Boolean);
 
-      const combined = Array.from(map.values());
       // Sort newest first
-      combined.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+      orders.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
 
       // Check for new incoming orders
-      const currentNewCount = combined.filter(o => o.status === 'new').length;
+      const currentNewCount = orders.filter(o => o.status === 'new').length;
       if (currentNewCount > lastKnownOrderCount && lastKnownOrderCount !== 0) {
         playChime();
       }
       lastKnownOrderCount = currentNewCount;
 
-      orders = combined;
       updateStats();
       renderOrders();
 
@@ -696,21 +700,33 @@
 
     // Delete single order
     async function deleteOrder(orderId) {
-      if (!confirm(`確定要刪除訂單 #${orderId} 嗎？此動作將同步從雲端資料庫與本機移除。`)) return;
-      orders = orders.filter(o => o.orderId !== orderId && o.id !== orderId);
+      const displayId = (orderId && orderId !== 'undefined' && orderId !== 'null') ? `#${orderId}` : '此筆異常';
+      if (!confirm(`確定要刪除訂單 ${displayId} 嗎？此動作將同步從雲端資料庫與本機移除。`)) return;
+
+      // Clean from local memory immediately (and clean any ghost undefined orders)
+      orders = orders.filter(o => {
+        const id = o.orderId || o.id;
+        if (!orderId || orderId === 'undefined' || orderId === 'null') {
+          return !!id; // 移除所有沒有 ID 的異常訂單
+        }
+        return (id !== orderId && o.orderId !== orderId && o.id !== orderId);
+      });
+
       localStorage.setItem('yougu_orders', JSON.stringify(orders));
       updateStats();
       renderOrders();
 
       // Sync delete with Cloudflare R2
-      try {
-        await fetch(`/api/orders?id=${encodeURIComponent(orderId)}`, {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: orderId, orderId: orderId })
-        });
-      } catch (err) {
-        console.warn('API delete sync note:', err);
+      if (orderId && orderId !== 'undefined' && orderId !== 'null') {
+        try {
+          await fetch(`/api/orders?id=${encodeURIComponent(orderId)}`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: orderId, orderId: orderId })
+          });
+        } catch (err) {
+          console.warn('API delete sync note:', err);
+        }
       }
     }
 
