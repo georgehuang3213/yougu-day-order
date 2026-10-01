@@ -678,27 +678,90 @@
       });
     }
 
-    // Update order status (PUT /api/orders & localStorage)
-    async function updateStatus(orderId, newStatus) {
-      // Update local state first for instant response
-      const order = orders.find(o => (o.orderId === orderId || o.id === orderId));
-      if (order) {
-        order.status = newStatus;
-        order.updatedAt = new Date().toISOString();
-        localStorage.setItem('yougu_orders', JSON.stringify(orders));
-        updateStats();
-        renderOrders();
+    // 根據狀態產生對應 LINE 回覆訊息
+    function buildLineMessage(order, newStatus) {
+      const name = order.customerName || '顧客';
+      const orderId = order.orderId || order.id || '';
+      const pickupDate = order.pickupDate || '當日';
+      const pickupTime = order.pickupTime || '盡速';
+      const total = order.finalTotal || order.totalAmount || order.total || 0;
+
+      const itemLines = (order.items || []).map((item, i) =>
+        `  ${i + 1}. ${item.name} × ${item.quantity || item.qty || 1}`
+      ).join('\n');
+
+      if (newStatus === 'preparing') {
+        return `✅ 您好，${name}！
+
+您的優穀日訂單 #${orderId} 已接單，現在開始為您用心製作 🫙
+
+📋 訂單明細：
+${itemLines}
+
+📅 預約取餐：${pickupDate} ${pickupTime}
+💰 合計金額：NT$ ${total}
+
+感謝您的訂購！我們會在餐點備妥後再通知您 😊
+—— 優穀日 Homemade`;
       }
 
-      // Sync to Serverless API & Cloudflare R2
+      if (newStatus === 'ready') {
+        return `🎉 ${name}，您好！
+
+您的優穀日訂單 #${orderId} 已製作完成 🫙✨
+
+📅 預約取餐：${pickupDate} ${pickupTime}
+💰 合計金額：NT$ ${total}
+
+餐點已備妥，請依約前來取餐，謝謝！
+—— 優穀日 Homemade`;
+      }
+
+      return null;
+    }
+
+    // Update order status (PUT /api/orders & Cloudflare R2)
+    async function updateStatus(orderId, newStatus) {
+      isBusy = true;
       try {
+        // Update local state first for instant response
+        const order = orders.find(o => (o.orderId === orderId || o.id === orderId));
+        if (order) {
+          order.status = newStatus;
+          order.updatedAt = new Date().toISOString();
+          localStorage.setItem('yougu_orders', JSON.stringify(orders));
+          updateStats();
+          renderOrders();
+
+          // 接單 or 待取餐時，自動開啟 LINE 發送確認訊息給顧客
+          const lineMsg = buildLineMessage(order, newStatus);
+          if (lineMsg) {
+            const phone = (order.customerPhone || order.phone || '').replace(/\D/g, '');
+            const encodedMsg = encodeURIComponent(lineMsg);
+
+            // 使用 LINE URL Scheme 開啟 LINE 對話並帶入訊息
+            // 優先嘗試透過電話號碼開啟 LINE 聯絡人
+            const lineUrl = `https://line.me/R/msg/text/?${encodedMsg}`;
+
+            setTimeout(() => {
+              if (confirm(`即將開啟 LINE，並帶入「已接單」確認訊息給顧客 ${order.customerName || ''}（${phone || '未留電話'}）\n\n點擊確定後請在 LINE 中選取顧客並傳送！`)) {
+                window.open(lineUrl, '_blank');
+              }
+            }, 200);
+          }
+        }
+
+        // Sync to Serverless API & Cloudflare R2
         await fetch('/api/orders', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ orderId, status: newStatus })
         });
+
       } catch (err) {
         console.warn('API status sync note:', err);
+      } finally {
+        isBusy = false;
       }
     }
 
