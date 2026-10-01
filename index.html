@@ -677,8 +677,8 @@ ${note ? `備註：${note}\n` : ''}
 
       // 開啟 LINE 發送訊息到官方帳號
       const encodedMsg = encodeURIComponent(lineMessage);
-      // LINE 官方帳號深層連結 (換成官方 ID @yougu_day 或直接開啟 LINE)
-      const lineUrl = `https://line.me/R/oaMessage/@yougu_day/?${encodedMsg}`;
+      // LINE 官方帳號深層連結：已綁定優穀日官方帳號 @500wjekc
+      const lineUrl = `https://line.me/R/oaMessage/@500wjekc/?${encodedMsg}`;
       
       alert("訂單已成立！即將為您跳轉至官方 LINE 發送確認訂單 ➔");
       window.location.href = lineUrl;
