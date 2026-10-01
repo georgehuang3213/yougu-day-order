@@ -158,8 +158,8 @@
       <!-- Modal Header -->
       <div class="p-4 border-b border-orange-100 flex items-center justify-between bg-orange-50">
         <div>
-          <h3 class="font-serif font-black text-lg text-brand-dark">確認訂單與取餐資訊</h3>
-          <p class="text-xs text-orange-600 font-medium">優穀日 ‧ 每日手作限量供應</p>
+          <h3 class="font-bold text-lg text-brand-dark">訂餐格式確認</h3>
+          <p class="text-xs text-orange-600 font-medium">請備註 😊（將自動格式化傳送至官方 LINE）</p>
         </div>
         <button onclick="closeCheckoutModal()" class="text-stone-400 hover:text-stone-700 p-1 text-2xl font-bold">&times;</button>
       </div>
@@ -169,24 +169,24 @@
         
         <!-- 取餐人資料 -->
         <div class="space-y-2.5">
-          <label class="block font-bold text-stone-700">1. 訂購人姓名 <span class="text-red-500">*</span></label>
-          <input type="text" id="cust-name" placeholder="請輸入取餐人姓名" class="w-full px-3.5 py-2.5 border border-stone-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-400 font-medium">
+          <label class="block font-bold text-stone-700">1. 訂購人： <span class="text-red-500">*</span></label>
+          <input type="text" id="cust-name" placeholder="請輸入姓名" class="w-full px-3.5 py-2.5 border border-stone-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-400 font-medium">
         </div>
 
         <div class="space-y-2.5">
-          <label class="block font-bold text-stone-700">2. 聯絡手機號碼 <span class="text-red-500">*</span></label>
+          <label class="block font-bold text-stone-700">2. 聯絡電話： <span class="text-red-500">*</span></label>
           <input type="tel" id="cust-phone" placeholder="例如：0912345678" class="w-full px-3.5 py-2.5 border border-stone-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-400 font-medium">
         </div>
 
         <!-- 預約日期與時間 (防呆：六日公休提醒) -->
         <div class="grid grid-cols-2 gap-3">
           <div class="space-y-1.5">
-            <label class="block font-bold text-stone-700">3. 預約取餐日期 <span class="text-red-500">*</span></label>
+            <label class="block font-bold text-stone-700">3. 取餐日期： <span class="text-red-500">*</span></label>
             <input type="date" id="pickup-date" onchange="checkPickupDate()" class="w-full px-3 py-2 border border-stone-300 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-orange-400">
             <p id="date-warning" class="text-[11px] text-red-500 font-bold hidden">⚠️ 六日與國定假日公休！</p>
           </div>
           <div class="space-y-1.5">
-            <label class="block font-bold text-stone-700">預約時間 (07:30-16:00) <span class="text-red-500">*</span></label>
+            <label class="block font-bold text-stone-700">4. 取餐時間： <span class="text-red-500">*</span></label>
             <select id="pickup-time" class="w-full px-3 py-2 border border-stone-300 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-orange-400">
               <option value="07:30">07:30</option>
               <option value="08:00">08:00</option>
@@ -208,6 +208,12 @@
               <option value="16:00">16:00</option>
             </select>
           </div>
+        </div>
+
+        <!-- 5. 餐點品項即時預覽 -->
+        <div class="space-y-1.5 bg-orange-50/60 p-3 rounded-xl border border-orange-200">
+          <label class="block font-bold text-stone-800 text-xs">5. 餐點品項：<span class="text-[11px] font-normal text-stone-500">(品名*數量)</span></label>
+          <div id="checkout-items-summary" class="text-xs space-y-1 text-stone-700 font-medium"></div>
         </div>
 
         <!-- 付款方式 (嚴格落實只收現金/LINE Pay Money) -->
@@ -272,6 +278,9 @@
 
       <!-- 雙按鈕送出操作區 -->
       <div class="p-4 border-t border-orange-100 bg-white space-y-2">
+        <div class="text-xs font-black text-red-600 bg-red-50 border border-red-200 py-2 px-3 rounded-xl text-center flex items-center justify-center space-x-1">
+          <span>‼️ 有回覆才算訂單完成 ✅</span>
+        </div>
         <!-- 核心亮點按鈕：一鍵傳送訂單至官方 LINE -->
         <button onclick="submitOrderViaLine()" class="w-full bg-[#06C755] hover:bg-[#05b34c] active:scale-95 text-white font-black py-3.5 rounded-2xl text-base shadow-lg shadow-green-500/20 flex items-center justify-center space-x-2 transition">
           <svg class="w-6 h-6 fill-current" viewBox="0 0 24 24">
@@ -512,6 +521,18 @@
       document.getElementById('cart-modal').classList.add('hidden');
       document.getElementById('checkout-modal').classList.remove('hidden');
       calculateFinalTotal();
+
+      // 渲染與官方格式相符的第 5 點餐點品項預覽
+      let summaryHtml = "";
+      let idx = 1;
+      for (const [id, qty] of Object.entries(cart)) {
+        const item = MENU_DATA.find(m => m.id === id);
+        if (item) {
+          summaryHtml += `<div class="flex justify-between py-0.5 border-b border-orange-100 last:border-none font-bold text-stone-800"><span>${idx}. ${item.name}*${qty}</span><span class="text-orange-600 font-normal">NT$ ${item.price * qty}</span></div>`;
+          idx++;
+        }
+      }
+      document.getElementById('checkout-items-summary').innerHTML = summaryHtml || '<div class="text-stone-400">尚未選擇餐點</div>';
     }
 
     function closeCheckoutModal() {
@@ -612,24 +633,29 @@
       localOrders.unshift({ ...orderPayload, id: `YG-${Date.now().toString().slice(-4)}`, createdAt: new Date().toISOString() });
       localStorage.setItem('yougu_orders', JSON.stringify(localOrders));
 
-      // 3. 生成排版極美的 LINE 官方訂單訊息
+      // 3. 生成與店家日常習慣 100% 完全相符的 LINE 官方訂單格式
+      let itemsFormatted = "";
+      orderItems.forEach((item, idx) => {
+        const itemNote = note ? ` (${note})` : '';
+        itemsFormatted += `${idx + 1}. ${item.name}*${item.qty}${idx === 0 && itemNote ? itemNote : ''}\n`;
+      });
+
       const lineMessage = 
-`🥣【 優穀日・線上預約訂單 】
-──────────────────
-👤 訂購姓名：${name}
-📱 手機號碼：${phone}
-📅 取餐日期：${date}
-⏰ 取餐時間：${time}
-💵 付款方式：${payment}
-🛍️ 自備購物袋：${needBag ? '是 (響應環保)' : '否'}
-──────────────────
-📋 訂購品項：
-${itemsText}──────────────────
-💰 餐點小計：NT$ ${subtotal}
-🎁 優惠折抵：- NT$ ${discountAmount} (${discountName})
-🔥 實付總額：NT$ ${finalTotal}
-${note ? `📝 備註事項：${note}\n` : ''}──────────────────
-✨ 收到請回覆確認，感謝您的預約！`;
+`訂餐格式
+
+請備註😊
+1. 訂購人：${name}
+2. 聯絡電話：${phone}
+3. 取餐日期：${date}
+4. 取餐時間：${time}
+5.餐點品項：
+請寫 (數量在品名後面*) (特殊需求請寫在品項後面)
+${itemsFormatted}
+付款方式：${payment}
+自備環保袋：${needBag ? '是' : '否'}
+${discountAmount > 0 ? `集點優惠折抵：-NT$ ${discountAmount} (${discountName})\n` : ''}總金額：NT$ ${finalTotal}
+${note ? `備註：${note}\n` : ''}
+‼️有回覆才算訂單完成✅`;
 
       // 清空購物車
       cart = {};

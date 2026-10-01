@@ -617,11 +617,30 @@
       const order = orders.find(o => o.orderId === orderId);
       if (!order) return;
 
-      const itemsStr = (order.items || []).map(i => `・${i.name} x${i.quantity || 1} $${i.subtotal || i.price}`).join('\n');
-      const text = `【優穀日 訂單通知】\n單號：#${order.orderId}\n顧客：${order.customerName} (${order.customerPhone})\n取餐時間：${order.pickupDate} ${order.pickupTime}\n\n訂單明細：\n${itemsStr}\n\n應收金額：$${order.finalTotal || order.totalAmount}\n付款：${order.paymentMethod === 'linepay' ? 'LINE Pay Money' : '現金'}\n備註：${order.notes || '無'}`;
+      let itemsStr = "";
+      (order.items || []).forEach((item, idx) => {
+        const itemNote = order.notes ? ` (${order.notes})` : '';
+        itemsStr += `${idx + 1}. ${item.name}*${item.quantity || item.qty || 1}${idx === 0 && itemNote ? itemNote : ''}\n`;
+      });
+
+      const text = `訂餐格式
+
+請備註😊
+1. 訂購人：${order.customerName || ''}
+2. 聯絡電話：${order.customerPhone || ''}
+3. 取餐日期：${order.pickupDate || ''}
+4. 取餐時間：${order.pickupTime || ''}
+5.餐點品項：
+請寫 (數量在品名後面*) (特殊需求請寫在品項後面)
+${itemsStr}
+付款方式：${order.paymentMethod === 'linepay' ? 'LINE Pay Money' : '現金付款'}
+自備環保袋：${order.bringEcoBag ? '是' : '否'}
+${order.couponApplied ? `集點優惠：${order.couponApplied}\n` : ''}總金額：NT$ ${order.finalTotal || order.totalAmount || 0}
+${order.notes ? `備註：${order.notes}\n` : ''}
+‼️有回覆才算訂單完成✅`;
 
       navigator.clipboard.writeText(text).then(() => {
-        alert(`已複製訂單 #${orderId} 明細！可直接貼在 LINE 傳給顧客。`);
+        alert(`已複製符合官方格式的訂單 #${orderId} 明細！可直接貼在 LINE 傳送。`);
       });
     }
 
