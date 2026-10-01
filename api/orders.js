@@ -182,6 +182,56 @@ function normalizeOrder(data, customId = null) {
   };
 }
 
+// 發送 LINE 通知給店家 (使用 LINE Messaging API Push Message)
+async function sendLineNotificationToStore(order) {
+  const token = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+  const toUser = process.env.LINE_STORE_USER_ID; // 店長個人 LINE User ID 或工作群組 ID
+
+  if (!token || !toUser) {
+    return; // 未設定時自動略過
+  }
+
+  const itemsText = (order.items || []).map((item, idx) => 
+    `  ${idx + 1}. ${item.name} × ${item.quantity || item.qty || 1} ($${(item.price || 0) * (item.quantity || item.qty || 1)})`
+  ).join('\n');
+
+  const text = 
+`🔔【優穀日・新訂單即時通知】
+
+單號：#${order.orderId || order.id}
+訂購人：${order.customerName}
+電話：${order.customerPhone || order.phone || '未留'}
+取餐時間：${order.pickupDate || '今日'} ${order.pickupTime || '盡速'}
+付款方式：${order.paymentMethod === 'linepay' ? 'LINE Pay Money' : '現場現金付款'}
+${order.bringEcoBag || order.needBag ? '自備餐袋：✅ 是\n' : ''}${order.discountAmount > 0 ? `優惠折抵：-NT$ ${order.discountAmount} (${order.discountCode || ''})\n` : ''}合計金額：NT$ ${order.finalTotal || order.total || 0}
+
+📋 訂購品項：
+${itemsText}
+${(order.notes || order.note) ? `\n備註：${order.notes || order.note}\n` : ''}
+👉 點擊開啟店長後台接單：
+https://yougu-day-order.vercel.app/admin`;
+
+  try {
+    const response = await fetch("https://api.line.me/v2/bot/message/push", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        to: toUser,
+        messages: [{ type: "text", text: text }]
+      })
+    });
+    if (!response.ok) {
+      const err = await response.text();
+      console.warn("LINE 推播失敗:", response.status, err);
+    }
+  } catch (err) {
+    console.warn("LINE 推播網路錯誤:", err);
+  }
+}
+
 export default async function handler(req, res) {
   // 允許跨來源請求 (CORS)
   res.setHeader("Access-Control-Allow-Credentials", true);
@@ -238,6 +288,9 @@ export default async function handler(req, res) {
 
       await saveOrders(r2Client, orders);
       await saveSingleOrder(r2Client, newOrder);
+
+      // 非同步發送 LINE 通知給店家（不阻礙顧客結帳回應）
+      sendLineNotificationToStore(newOrder).catch(e => console.warn("LINE push error:", e));
 
       return res.status(201).json({
         success: true,
