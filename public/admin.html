@@ -779,24 +779,31 @@ ${order.notes ? `備註：${order.notes}\n` : ''}
     }
 
     // ==========================================
-    // 登入與帳密驗證邏輯
+    // 加密驗證邏輯 (Web Crypto API SHA-256 + Salt)
     // ==========================================
-    const DEFAULT_USER = "admin";
-    const DEFAULT_PASS = "yougu888";
+    const AUTH_SALT = "yougu_secret_salt_2026";
+    // 預設帳號: admin, 預設密碼: yougu888 的加鹽雜湊值 (完全無明文密碼)
+    const DEFAULT_AUTH_HASH = "39851c6b89a7b7786c050106cd2ee2522f143f0d4c4e201dee606f16b0d76f07";
 
-    function getAdminCredentials() {
-      const stored = localStorage.getItem('yougu_admin_auth');
-      if (stored) {
-        try {
-          return JSON.parse(stored);
-        } catch (e) {}
-      }
-      return { username: DEFAULT_USER, password: DEFAULT_PASS };
+    // 使用 SHA-256 進行單向安全加密雜湊
+    async function hashCredentials(username, password) {
+      const text = `${(username || '').trim().toLowerCase()}:${password}:${AUTH_SALT}`;
+      const msgBuffer = new TextEncoder().encode(text);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    function getStoredAuthHash() {
+      return localStorage.getItem('yougu_auth_hash') || DEFAULT_AUTH_HASH;
     }
 
     function checkAuth() {
-      const isAuthed = sessionStorage.getItem('yougu_is_authenticated') === 'true';
+      const token = sessionStorage.getItem('yougu_session_token');
+      const storedHash = getStoredAuthHash();
+      const isAuthed = !!token && token === storedHash;
       const modal = document.getElementById('loginModal');
+
       if (isAuthed) {
         if (modal) modal.classList.add('hidden');
         return true;
@@ -806,17 +813,20 @@ ${order.notes ? `備註：${order.notes}\n` : ''}
       }
     }
 
-    function handleLogin(event) {
+    async function handleLogin(event) {
       if (event) event.preventDefault();
       const u = document.getElementById('loginUsername').value.trim();
       const p = document.getElementById('loginPassword').value;
-      const creds = getAdminCredentials();
       const errorDiv = document.getElementById('loginError');
 
-      if (u === creds.username && p === creds.password) {
-        sessionStorage.setItem('yougu_is_authenticated', 'true');
+      const computedHash = await hashCredentials(u, p);
+      const targetHash = getStoredAuthHash();
+
+      if (computedHash === targetHash) {
+        sessionStorage.setItem('yougu_session_token', computedHash);
         if (errorDiv) errorDiv.classList.add('hidden');
         document.getElementById('loginModal').classList.add('hidden');
+        document.getElementById('loginPassword').value = '';
         fetchOrders(true);
       } else {
         if (errorDiv) {
@@ -828,7 +838,7 @@ ${order.notes ? `備註：${order.notes}\n` : ''}
 
     function handleLogout() {
       if (confirm('確定要登出店長後台系統嗎？')) {
-        sessionStorage.removeItem('yougu_is_authenticated');
+        sessionStorage.removeItem('yougu_session_token');
         document.getElementById('loginPassword').value = '';
         const errorDiv = document.getElementById('loginError');
         if (errorDiv) errorDiv.classList.add('hidden');
@@ -862,14 +872,17 @@ ${order.notes ? `備註：${order.notes}\n` : ''}
       document.getElementById('changePwdModal').classList.add('hidden');
     }
 
-    function saveNewPassword(event) {
+    async function saveNewPassword(event) {
       event.preventDefault();
       const curr = document.getElementById('currPwdInput').value;
       const newPwd = document.getElementById('newPwdInput').value;
-      const creds = getAdminCredentials();
       const err = document.getElementById('changePwdError');
 
-      if (curr !== creds.password) {
+      // 驗證目前密碼
+      const currHash = await hashCredentials('admin', curr);
+      const targetHash = getStoredAuthHash();
+
+      if (currHash !== targetHash) {
         if (err) {
           err.innerText = "目前密碼輸入不正確！";
           err.classList.remove('hidden');
@@ -885,12 +898,12 @@ ${order.notes ? `備註：${order.notes}\n` : ''}
         return;
       }
 
-      localStorage.setItem('yougu_admin_auth', JSON.stringify({
-        username: creds.username,
-        password: newPwd
-      }));
+      // 加密儲存新雜湊
+      const newHash = await hashCredentials('admin', newPwd);
+      localStorage.setItem('yougu_auth_hash', newHash);
+      sessionStorage.setItem('yougu_session_token', newHash);
 
-      alert("密碼已成功更新！請妥善保管新密碼。");
+      alert("密碼已透過 SHA-256 加密完成更新！");
       closeChangePasswordModal();
     }
 
@@ -902,7 +915,7 @@ ${order.notes ? `備註：${order.notes}\n` : ''}
       }
       // Poll every 8 seconds for new orders (only if authenticated)
       pollInterval = setInterval(() => {
-        if (sessionStorage.getItem('yougu_is_authenticated') === 'true') {
+        if (sessionStorage.getItem('yougu_session_token') === getStoredAuthHash()) {
           fetchOrders(false);
         }
       }, 8000);
