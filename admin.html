@@ -19,6 +19,75 @@
 </head>
 <body class="bg-stone-100 min-h-screen text-stone-800 antialiased flex flex-col">
 
+  <!-- 登入驗證彈窗 (未登入時全螢幕覆蓋) -->
+  <div id="loginModal" class="fixed inset-0 z-50 bg-stone-900/85 backdrop-blur-md flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl shadow-2xl border border-stone-200 max-w-sm w-full p-7 text-center">
+      <img src="images/logo.png" alt="Logo" class="w-16 h-16 mx-auto rounded-full border-2 border-emerald-600 shadow-md p-1 bg-white mb-3 object-contain">
+      <h2 class="text-xl font-bold text-stone-900 mb-1">優穀日・店長後台</h2>
+      <p class="text-xs text-stone-500 mb-5">請輸入管理員帳號與密碼以進入系統</p>
+
+      <form id="loginForm" onsubmit="handleLogin(event)" class="space-y-3.5 text-left">
+        <div>
+          <label class="block text-xs font-bold text-stone-700 mb-1">管理帳號</label>
+          <div class="relative">
+            <i class="fas fa-user absolute left-3.5 top-3 text-stone-400 text-xs"></i>
+            <input type="text" id="loginUsername" required class="w-full pl-9 pr-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-emerald-600" placeholder="預設帳號：admin" autocomplete="username" autofocus>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-stone-700 mb-1">管理密碼</label>
+          <div class="relative">
+            <i class="fas fa-lock absolute left-3.5 top-3 text-stone-400 text-xs"></i>
+            <input type="password" id="loginPassword" required class="w-full pl-9 pr-9 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-emerald-600" placeholder="預設密碼：yougu888" autocomplete="current-password">
+            <button type="button" onclick="togglePasswordVisibility()" class="absolute right-3 top-2.5 text-stone-400 hover:text-stone-600">
+              <i id="pwdToggleIcon" class="fas fa-eye text-xs"></i>
+            </button>
+          </div>
+        </div>
+
+        <div id="loginError" class="hidden bg-rose-50 border border-rose-200 text-rose-600 text-xs rounded-lg p-2 text-center font-medium">
+          <i class="fas fa-exclamation-circle mr-1"></i> 帳號或密碼錯誤，請重新輸入
+        </div>
+
+        <button type="submit" class="w-full py-2.5 bg-emerald-800 hover:bg-emerald-900 text-white font-bold rounded-xl shadow-md transition duration-150 flex items-center justify-center space-x-1.5 text-xs mt-3">
+          <i class="fas fa-sign-in-alt"></i>
+          <span>登入系統</span>
+        </button>
+
+        <div class="pt-2 text-center text-[11px] text-stone-400 border-t border-stone-100 mt-2">
+          預設帳號：<span class="font-mono font-semibold text-stone-600">admin</span><br>
+          預設密碼：<span class="font-mono font-semibold text-stone-600">yougu888</span>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 修改密碼彈窗 -->
+  <div id="changePwdModal" class="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6 text-left">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="font-bold text-stone-800 text-sm"><i class="fas fa-key text-emerald-700 mr-1.5"></i>修改店長密碼</h3>
+        <button onclick="closeChangePasswordModal()" class="text-stone-400 hover:text-stone-600"><i class="fas fa-times"></i></button>
+      </div>
+      <form onsubmit="saveNewPassword(event)" class="space-y-3">
+        <div>
+          <label class="block text-xs font-bold text-stone-700 mb-1">目前密碼</label>
+          <input type="password" id="currPwdInput" required class="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-xs focus:ring-2 focus:ring-emerald-600 outline-none">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-stone-700 mb-1">新密碼</label>
+          <input type="password" id="newPwdInput" required minlength="4" class="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-xs focus:ring-2 focus:ring-emerald-600 outline-none" placeholder="至少4位數">
+        </div>
+        <div id="changePwdError" class="hidden text-rose-600 text-xs font-medium"></div>
+        <div class="flex space-x-2 pt-2">
+          <button type="button" onclick="closeChangePasswordModal()" class="flex-1 py-2 bg-stone-100 hover:bg-stone-200 text-stone-600 rounded-lg text-xs font-bold">取消</button>
+          <button type="submit" class="flex-1 py-2 bg-emerald-800 hover:bg-emerald-900 text-white rounded-lg text-xs font-bold">儲存新密碼</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Header -->
   <header class="bg-emerald-900 text-white shadow-md sticky top-0 z-30">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between">
@@ -34,24 +103,36 @@
       </div>
       
       <!-- Right Controls -->
-      <div class="flex items-center space-x-2 sm:space-x-3">
+      <div class="flex items-center space-x-1.5 sm:space-x-2.5">
         <!-- Sound alert toggle -->
-        <button id="soundToggleBtn" onclick="toggleSound()" class="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-800 hover:bg-emerald-700 text-emerald-100 transition shadow-sm">
+        <button id="soundToggleBtn" onclick="toggleSound()" class="flex items-center space-x-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-800 hover:bg-emerald-700 text-emerald-100 transition shadow-sm">
           <i id="soundIcon" class="fas fa-volume-up text-amber-300"></i>
-          <span id="soundText" class="hidden sm:inline">新單提示音: 開啟</span>
+          <span id="soundText" class="hidden md:inline">提示音: 開</span>
         </button>
 
         <!-- Refresh button -->
-        <button onclick="fetchOrders(true)" class="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-800 hover:bg-emerald-700 text-emerald-100 transition shadow-sm" title="立即重新整理">
+        <button onclick="fetchOrders(true)" class="flex items-center space-x-1 px-2.5 sm:px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-800 hover:bg-emerald-700 text-emerald-100 transition shadow-sm" title="立即重新整理">
           <i id="refreshIcon" class="fas fa-sync-alt"></i>
           <span class="hidden sm:inline">更新</span>
         </button>
 
+        <!-- Change Password button -->
+        <button onclick="openChangePasswordModal()" class="flex items-center space-x-1 px-2.5 sm:px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-800 hover:bg-emerald-700 text-emerald-100 transition shadow-sm" title="修改店長密碼">
+          <i class="fas fa-key text-amber-300"></i>
+          <span class="hidden sm:inline">改密碼</span>
+        </button>
+
         <!-- Customer site link -->
-        <a href="index.html" target="_blank" class="flex items-center space-x-1 px-3 py-1.5 text-xs font-medium rounded-lg bg-amber-500 hover:bg-amber-600 text-white transition shadow-sm">
+        <a href="index.html" target="_blank" class="flex items-center space-x-1 px-2.5 sm:px-3 py-1.5 text-xs font-medium rounded-lg bg-amber-500 hover:bg-amber-600 text-white transition shadow-sm">
           <i class="fas fa-external-link-alt"></i>
           <span class="hidden sm:inline">點餐前台</span>
         </a>
+
+        <!-- Logout button -->
+        <button onclick="handleLogout()" class="flex items-center space-x-1 px-2.5 sm:px-3 py-1.5 text-xs font-medium rounded-lg bg-rose-700 hover:bg-rose-800 text-white transition shadow-sm" title="登出後台">
+          <i class="fas fa-sign-out-alt"></i>
+          <span class="hidden sm:inline">登出</span>
+        </button>
       </div>
     </div>
   </header>
@@ -697,12 +778,133 @@ ${order.notes ? `備註：${order.notes}\n` : ''}
       renderOrders();
     }
 
+    // ==========================================
+    // 登入與帳密驗證邏輯
+    // ==========================================
+    const DEFAULT_USER = "admin";
+    const DEFAULT_PASS = "yougu888";
+
+    function getAdminCredentials() {
+      const stored = localStorage.getItem('yougu_admin_auth');
+      if (stored) {
+        try {
+          return JSON.parse(stored);
+        } catch (e) {}
+      }
+      return { username: DEFAULT_USER, password: DEFAULT_PASS };
+    }
+
+    function checkAuth() {
+      const isAuthed = sessionStorage.getItem('yougu_is_authenticated') === 'true';
+      const modal = document.getElementById('loginModal');
+      if (isAuthed) {
+        if (modal) modal.classList.add('hidden');
+        return true;
+      } else {
+        if (modal) modal.classList.remove('hidden');
+        return false;
+      }
+    }
+
+    function handleLogin(event) {
+      if (event) event.preventDefault();
+      const u = document.getElementById('loginUsername').value.trim();
+      const p = document.getElementById('loginPassword').value;
+      const creds = getAdminCredentials();
+      const errorDiv = document.getElementById('loginError');
+
+      if (u === creds.username && p === creds.password) {
+        sessionStorage.setItem('yougu_is_authenticated', 'true');
+        if (errorDiv) errorDiv.classList.add('hidden');
+        document.getElementById('loginModal').classList.add('hidden');
+        fetchOrders(true);
+      } else {
+        if (errorDiv) {
+          errorDiv.classList.remove('hidden');
+          errorDiv.innerText = "⚠️ 帳號或密碼錯誤，請重新輸入！";
+        }
+      }
+    }
+
+    function handleLogout() {
+      if (confirm('確定要登出店長後台系統嗎？')) {
+        sessionStorage.removeItem('yougu_is_authenticated');
+        document.getElementById('loginPassword').value = '';
+        const errorDiv = document.getElementById('loginError');
+        if (errorDiv) errorDiv.classList.add('hidden');
+        document.getElementById('loginModal').classList.remove('hidden');
+      }
+    }
+
+    function togglePasswordVisibility() {
+      const pwdInput = document.getElementById('loginPassword');
+      const icon = document.getElementById('pwdToggleIcon');
+      if (pwdInput.type === 'password') {
+        pwdInput.type = 'text';
+        icon.classList.remove('fa-eye');
+        icon.classList.add('fa-eye-slash');
+      } else {
+        pwdInput.type = 'password';
+        icon.classList.remove('fa-eye-slash');
+        icon.classList.add('fa-eye');
+      }
+    }
+
+    function openChangePasswordModal() {
+      document.getElementById('currPwdInput').value = '';
+      document.getElementById('newPwdInput').value = '';
+      const err = document.getElementById('changePwdError');
+      if (err) err.classList.add('hidden');
+      document.getElementById('changePwdModal').classList.remove('hidden');
+    }
+
+    function closeChangePasswordModal() {
+      document.getElementById('changePwdModal').classList.add('hidden');
+    }
+
+    function saveNewPassword(event) {
+      event.preventDefault();
+      const curr = document.getElementById('currPwdInput').value;
+      const newPwd = document.getElementById('newPwdInput').value;
+      const creds = getAdminCredentials();
+      const err = document.getElementById('changePwdError');
+
+      if (curr !== creds.password) {
+        if (err) {
+          err.innerText = "目前密碼輸入不正確！";
+          err.classList.remove('hidden');
+        }
+        return;
+      }
+
+      if (!newPwd || newPwd.length < 4) {
+        if (err) {
+          err.innerText = "新密碼長度至少需 4 個字元！";
+          err.classList.remove('hidden');
+        }
+        return;
+      }
+
+      localStorage.setItem('yougu_admin_auth', JSON.stringify({
+        username: creds.username,
+        password: newPwd
+      }));
+
+      alert("密碼已成功更新！請妥善保管新密碼。");
+      closeChangePasswordModal();
+    }
+
     // Initialize
     window.addEventListener('DOMContentLoaded', () => {
-      fetchOrders();
-      // Poll every 8 seconds for new orders
+      const authed = checkAuth();
+      if (authed) {
+        fetchOrders();
+      }
+      // Poll every 8 seconds for new orders (only if authenticated)
       pollInterval = setInterval(() => {
-        fetchOrders(false);
+        if (sessionStorage.getItem('yougu_is_authenticated') === 'true') {
+          fetchOrders(false);
+        }
       }, 8000);
     });
   </script>
