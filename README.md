@@ -74,12 +74,39 @@ npx vercel
 
 ---
 
+---
+
+## 🗄️ Cloudflare R2 資料庫儲存設定
+
+系統已完整串接 **Cloudflare R2**（S3 相容高效物件儲存），所有訂單將永久保存在雲端儲存空間中，不再因伺服器重啟或更換裝置而遺失。
+
+### 如何取得 Cloudflare R2 金鑰並設定：
+
+1. **建立 R2 儲存貯體 (Bucket)**：
+   - 登入 [Cloudflare Dashboard](https://dash.cloudflare.com/) ➔ 點擊左側選單 **R2**。
+   - 點擊 **Create bucket**，輸入名稱（例如：`yougu-orders`），點擊建立。
+2. **建立 API Token (存取金鑰)**：
+   - 在 R2 頁面右側點擊 **Manage R2 API Tokens** ➔ **Create API Token**。
+   - 權限選擇 **Object Read & Write (讀寫權限)**。
+   - 點擊建立後，複製儲存 **Access Key ID** 與 **Secret Access Key**。
+3. **在 Vercel 設定環境變數**：
+   - 進入 Vercel 專案 ➔ **Settings** ➔ **Environment Variables**。
+   - 新增以下 4 個環境變數：
+     - `CLOUDFLARE_ACCOUNT_ID`：您的 Cloudflare Account ID（在 Cloudflare 首頁右側或 R2 頁面皆可看到）
+     - `R2_ACCESS_KEY_ID`：剛才取得的 Access Key ID
+     - `R2_SECRET_ACCESS_KEY`：剛才取得的 Secret Access Key
+     - `R2_BUCKET_NAME`：例如 `yougu-orders`
+4. **重新部署 (Redeploy)**：
+   - 設定完成後在 Vercel 點擊 Redeploy，所有前台下單與後台更新將自動同步寫入 Cloudflare R2！
+
+---
+
 ## 📂 專案檔案結構
 
 ```
 yougu_day_order_system/
 ├── api/
-│   └── orders.js           # Vercel Serverless 即時訂單 API (支援 GET/POST/PUT)
+│   └── orders.js           # Cloudflare R2 雲端訂單 API (支援 GET/POST/PUT/DELETE)
 ├── public/
 │   ├── images/
 │   │   ├── logo.png        # 優穀日官方透明 Logo
@@ -87,7 +114,8 @@ yougu_day_order_system/
 │   │   └── blueberry_bowl.jpg # 自製藍莓果醬優格碗照片
 │   ├── index.html          # 顧客手機點餐前台
 │   └── admin.html          # 店長接單與備料管理後台
-├── package.json            # 專案套件設定檔
+├── .env.example            # Cloudflare R2 環境變數範例
+├── package.json            # 專案套件設定檔 (@aws-sdk/client-s3)
 ├── vercel.json             # Vercel 路由與靜態重定向配置
 └── README.md               # 系統說明與部署手冊
 ```
