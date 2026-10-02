@@ -309,7 +309,11 @@ export default async function handler(req, res) {
       });
     } catch (err) {
       console.error("POST 訂單失敗:", err);
-      return res.status(500).json({ success: false, message: "儲存訂單失敗", error: err.message });
+      return res.status(500).json({
+        success: false, message: "儲存訂單失敗",
+        error: err.message,
+        cause: err.cause?.message || err.cause?.code || String(err.cause || "")
+      });
     }
   }
 
