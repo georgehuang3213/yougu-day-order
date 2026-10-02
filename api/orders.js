@@ -182,20 +182,20 @@ function normalizeOrder(data, customId = null) {
   };
 }
 
-// 發送 LINE 通知給店家 (使用 LINE Messaging API Push Message)
+// 發送 Telegram 通知給店家（顧客下單後自動推播，免費無限制）
 async function sendLineNotificationToStore(order) {
-  const token = process.env.LINE_CHANNEL_ACCESS_TOKEN;
-  const toUser = process.env.LINE_STORE_USER_ID; // 店長個人 LINE User ID 或工作群組 ID
+  const tgToken = process.env.TELEGRAM_BOT_TOKEN;
+  const tgChatId = process.env.TELEGRAM_CHAT_ID;
 
-  if (!token || !toUser) {
+  if (!tgToken || !tgChatId) {
     return; // 未設定時自動略過
   }
 
-  const itemsText = (order.items || []).map((item, idx) => 
-    `  ${idx + 1}. ${item.name} × ${item.quantity || item.qty || 1} ($${(item.price || 0) * (item.quantity || item.qty || 1)})`
+  const itemsText = (order.items || []).map((item, idx) =>
+    `  ${idx + 1}. ${item.name} × ${item.quantity || item.qty || 1} (NT$${(item.price || 0) * (item.quantity || item.qty || 1)})`
   ).join('\n');
 
-  const text = 
+  const text =
 `🔔【優穀日・新訂單即時通知】
 
 單號：#${order.orderId || order.id}
@@ -208,27 +208,24 @@ ${order.bringEcoBag || order.needBag ? '自備餐袋：✅ 是\n' : ''}${order.d
 📋 訂購品項：
 ${itemsText}
 ${(order.notes || order.note) ? `\n備註：${order.notes || order.note}\n` : ''}
-👉 點擊開啟店長後台接單：
+👉 點擊開啟後台接單：
 https://yougu-day-order.vercel.app/admin`;
 
   try {
-    const response = await fetch("https://api.line.me/v2/bot/message/push", {
+    const response = await fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${token}`
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        to: toUser,
-        messages: [{ type: "text", text: text }]
+        chat_id: tgChatId,
+        text: text
       })
     });
     if (!response.ok) {
       const err = await response.text();
-      console.warn("LINE 推播失敗:", response.status, err);
+      console.warn("Telegram 推播失敗:", response.status, err);
     }
   } catch (err) {
-    console.warn("LINE 推播網路錯誤:", err);
+    console.warn("Telegram 推播網路錯誤:", err);
   }
 }
 
