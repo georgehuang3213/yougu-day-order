@@ -214,8 +214,8 @@ function normalizeOrder(data, customId = null) {
 // 發送 Telegram 通知給店家（顧客下單自動即時推播）
 // ─────────────────────────────────────────────────────────
 async function sendLineNotificationToStore(order) {
-  const tgToken  = (process.env.TELEGRAM_BOT_TOKEN || "").trim();
-  const tgChatId = (process.env.TELEGRAM_CHAT_ID || "").trim();
+  const tgToken  = (process.env.TELEGRAM_BOT_TOKEN || "8711630273:AAGf9_Okw8pRsUwP4I_3wpWzKSO14vL3Cmc").trim();
+  const tgChatId = (process.env.TELEGRAM_CHAT_ID || "5641997646").trim();
   if (!tgToken || !tgChatId) {
     console.warn("Telegram Token 或 Chat ID 未設定，略過推播");
     return;
