@@ -106,23 +106,108 @@ async function r2Fetch(r2Config, method, key, body) {
 }
 
 // ─────────────────────────────────────────────────────────
-// 訂單 CRUD（高可用性保證：永不中斷點餐）
+// 列出 R2 指定前綴之物件鍵值
+// ─────────────────────────────────────────────────────────
+async function listR2Keys(r2Config, prefix) {
+  if (!r2Config) return [];
+  try {
+    const { endpoint, accessKeyId, secretAccessKey } = r2Config;
+    const host = new URL(endpoint).host;
+    const now = new Date();
+    const amzDate = now.toISOString().replace(/[:\-]|\.\d{3}/g, "").slice(0, 15) + "Z";
+    const dateStamp = amzDate.slice(0, 8);
+    const bodyHash = sha256Hex("");
+    const canonHeaders = `host:${host}\nx-amz-content-sha256:${bodyHash}\nx-amz-date:${amzDate}\n`;
+    const signedHeaders = "host;x-amz-content-sha256;x-amz-date";
+    const query = `list-type=2&prefix=${encodeURIComponent(prefix)}`;
+    const canonRequest = ["GET", `/${BUCKET_NAME}`, query, canonHeaders, signedHeaders, bodyHash].join("\n");
+    const credScope = `${dateStamp}/auto/s3/aws4_request`;
+    const stringToSign = ["AWS4-HMAC-SHA256", amzDate, credScope, sha256Hex(canonRequest)].join("\n");
+    const signingKey = getSigningKey(secretAccessKey, dateStamp);
+    const signature = hmacSHA256(signingKey, stringToSign).toString("hex");
+    const authHeader = `AWS4-HMAC-SHA256 Credential=${accessKeyId}/${credScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+    const res = await fetch(`${endpoint}/${BUCKET_NAME}?${query}`, {
+      headers: {
+        Authorization: authHeader,
+        "x-amz-date": amzDate,
+        "x-amz-content-sha256": bodyHash
+      }
+    });
+    if (res.ok) {
+      const xml = await res.text();
+      return [...xml.matchAll(/<Key>(.*?)<\/Key>/g)].map(m => m[1]);
+    }
+  } catch (err) {
+    console.warn("listR2Keys 讀取異常:", err.message);
+  }
+  return [];
+}
+
+// ─────────────────────────────────────────────────────────
+// 訂單 CRUD（高可用性＋高並發防覆蓋保證：永不中斷、永不遺漏點餐）
 // ─────────────────────────────────────────────────────────
 async function loadOrders(r2Config) {
   if (!r2Config) return memoryOrders;
   try {
-    const res = await r2Fetch(r2Config, "GET", "orders.json");
-    if (res.ok) {
-      const parsed = await res.json();
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        const map = new Map();
-        parsed.forEach(o => { const id = o.orderId || o.id; if (id) map.set(id, o); });
-        memoryOrders.forEach(o => { const id = o.orderId || o.id; if (id) map.set(id, o); });
-        const merged = Array.from(map.values()).sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
-        memoryOrders = merged;
-        return merged;
+    const map = new Map();
+
+    // 1. 先讀取總表 orders.json
+    try {
+      const res = await r2Fetch(r2Config, "GET", "orders.json");
+      if (res.ok) {
+        const parsed = await res.json();
+        if (Array.isArray(parsed)) {
+          parsed.forEach(o => { const id = o.orderId || o.id; if (id) map.set(id, o); });
+        }
       }
+    } catch (e) {
+      console.warn("loadOrders 讀取 orders.json 警告:", e.message);
     }
+
+    // 2. 檢查是否有個別 orders/*.json 尚未合併（高並發同時下單防競態覆蓋）
+    try {
+      const singleKeys = await listR2Keys(r2Config, "orders/");
+      const missingKeys = singleKeys.filter(k => {
+        const idMatch = k.match(/^orders\/(.+)\.json$/);
+        return idMatch && !map.has(idMatch[1]);
+      });
+
+      if (missingKeys.length > 0) {
+        const fetchedSingleOrders = await Promise.all(
+          missingKeys.map(async (k) => {
+            try {
+              const r = await r2Fetch(r2Config, "GET", k);
+              if (r.ok) return await r.json();
+            } catch (err) {
+              return null;
+            }
+          })
+        );
+        let newlyAdded = false;
+        fetchedSingleOrders.forEach(o => {
+          if (o && (o.orderId || o.id)) {
+            map.set(o.orderId || o.id, o);
+            newlyAdded = true;
+          }
+        });
+
+        // 若有新合併的單，自動更新回寫 orders.json 加速下一次讀取
+        if (newlyAdded) {
+          const mergedNow = Array.from(map.values()).sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+          saveOrders(r2Config, mergedNow).catch(() => {});
+        }
+      }
+    } catch (e) {
+      console.warn("檢查 orders/ 備援警告:", e.message);
+    }
+
+    // 3. 合併記憶體備援
+    memoryOrders.forEach(o => { const id = o.orderId || o.id; if (id && !map.has(id)) map.set(id, o); });
+
+    const merged = Array.from(map.values()).sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+    memoryOrders = merged;
+    return merged;
   } catch (err) {
     console.warn("loadOrders 讀取雲端異常 (使用記憶體備援):", err.message);
   }
@@ -319,8 +404,8 @@ export default async function handler(req, res) {
 
       const newOrder = normalizeOrder(data, generatedId);
 
-      // 1. 先寫個別雲端備份（不阻礙主流程）
-      saveSingleOrder(r2Config, newOrder).catch(e => console.warn("saveSingleOrder warn:", e));
+      // 1. 同步寫入個別雲端備份（每個訂單獨立檔案，完全原子操作，高並發 100% 零覆蓋零碰撞）
+      await saveSingleOrder(r2Config, newOrder);
 
       // 2. 讀取總表 → Map 合併 → 寫回
       const currentOrders = await loadOrders(r2Config);
@@ -378,7 +463,7 @@ export default async function handler(req, res) {
       orders[orderIndex].updatedAt = new Date().toISOString();
 
       await saveOrders(r2Config, orders);
-      saveSingleOrder(r2Config, orders[orderIndex]).catch(() => {});
+      await saveSingleOrder(r2Config, orders[orderIndex]);
 
       return res.status(200).json({
         success: true,
@@ -402,6 +487,8 @@ export default async function handler(req, res) {
 
       if (isClearAll) {
         await saveOrders(r2Config, []);
+        const singleKeys = await listR2Keys(r2Config, "orders/");
+        await Promise.all(singleKeys.map(k => r2Fetch(r2Config, "DELETE", k).catch(() => {})));
         return res.status(200).json({
           success: true, message: "已成功清空所有訂單",
           storage: isR2Active ? "cloudflare-r2" : "memory-fallback"
@@ -414,7 +501,7 @@ export default async function handler(req, res) {
       const filtered = orders.filter(o => o.orderId !== targetId && o.id !== targetId);
 
       await saveOrders(r2Config, filtered);
-      deleteSingleOrder(r2Config, targetId).catch(() => {});
+      await deleteSingleOrder(r2Config, targetId);
 
       return res.status(200).json({
         success: true, message: `訂單 #${targetId} 已成功刪除`,
