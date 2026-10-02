@@ -657,23 +657,32 @@
 
     <!-- Controls & Status Filter Bar -->
     <div class="bg-white p-4 rounded-xl shadow-sm border border-stone-200 mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-      <!-- Tabs -->
-      <div class="flex flex-wrap gap-1.5 sm:gap-2">
-        <button onclick="setFilter('all')" id="tab-all" class="filter-tab px-3.5 py-1.5 rounded-lg text-xs font-medium bg-emerald-800 text-white shadow-sm transition">
-          全部 (<span id="count-all">0</span>)
-        </button>
-        <button onclick="setFilter('new')" id="tab-new" class="filter-tab px-3.5 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200 transition">
-          新訂單 (<span id="count-new">0</span>)
-        </button>
-        <button onclick="setFilter('preparing')" id="tab-preparing" class="filter-tab px-3.5 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200 transition">
-          製作中 (<span id="count-preparing">0</span>)
-        </button>
-        <button onclick="setFilter('ready')" id="tab-ready" class="filter-tab px-3.5 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200 transition">
-          待取餐 (<span id="count-ready">0</span>)
-        </button>
-        <button onclick="setFilter('completed')" id="tab-completed" class="filter-tab px-3.5 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200 transition">
-          已完成 (<span id="count-completed">0</span>)
-        </button>
+      <!-- Tabs: Status & Date Filter -->
+      <div class="flex flex-col sm:flex-row sm:items-center gap-2.5">
+        <div class="flex flex-wrap gap-1.5 sm:gap-2">
+          <button onclick="setFilter('all')" id="tab-all" class="filter-tab px-3.5 py-1.5 rounded-lg text-xs font-medium bg-emerald-800 text-white shadow-sm transition">
+            全部 (<span id="count-all">0</span>)
+          </button>
+          <button onclick="setFilter('new')" id="tab-new" class="filter-tab px-3.5 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200 transition">
+            新訂單 (<span id="count-new">0</span>)
+          </button>
+          <button onclick="setFilter('preparing')" id="tab-preparing" class="filter-tab px-3.5 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200 transition">
+            製作中 (<span id="count-preparing">0</span>)
+          </button>
+          <button onclick="setFilter('ready')" id="tab-ready" class="filter-tab px-3.5 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200 transition">
+            待取餐 (<span id="count-ready">0</span>)
+          </button>
+          <button onclick="setFilter('completed')" id="tab-completed" class="filter-tab px-3.5 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200 transition">
+            已完成 (<span id="count-completed">0</span>)
+          </button>
+        </div>
+
+        <!-- 取餐預約日期篩選 -->
+        <div class="flex items-center gap-1 bg-stone-100 p-1 rounded-xl text-xs w-fit">
+          <button onclick="setDateFilter('all')" id="date-tab-all" class="date-filter-tab px-2.5 py-1 rounded-lg text-xs font-bold bg-white text-stone-800 shadow-xs transition">所有日期</button>
+          <button onclick="setDateFilter('today')" id="date-tab-today" class="date-filter-tab px-2.5 py-1 rounded-lg text-xs font-medium text-stone-600 hover:text-stone-800 transition">📅 今日取餐</button>
+          <button onclick="setDateFilter('tomorrow')" id="date-tab-tomorrow" class="date-filter-tab px-2.5 py-1 rounded-lg text-xs font-medium text-stone-600 hover:text-stone-800 transition">⏰ 明日預約</button>
+        </div>
       </div>
 
       <!-- Action buttons: Reports, Menu, Export CSV, Clear mock -->
@@ -725,6 +734,7 @@
   <script>
     let orders = [];
     let currentFilter = 'all';
+    let currentDateFilter = 'all';
     let soundEnabled = true;
     let lastKnownOrderCount = 0;
     let pollInterval = null;
@@ -816,6 +826,19 @@
       const activeBtn = document.getElementById(`tab-${filter}`);
       if (activeBtn) {
         activeBtn.className = 'filter-tab px-3.5 py-1.5 rounded-lg text-xs font-medium bg-emerald-800 text-white shadow-sm transition';
+      }
+      renderOrders();
+    }
+
+    // Date quick filter switching (All / Today / Tomorrow)
+    function setDateFilter(df) {
+      currentDateFilter = df;
+      document.querySelectorAll('.date-filter-tab').forEach(b => {
+        b.className = 'date-filter-tab px-2.5 py-1 rounded-lg text-xs font-medium text-stone-600 hover:text-stone-800 transition';
+      });
+      const activeBtn = document.getElementById(`date-tab-${df}`);
+      if (activeBtn) {
+        activeBtn.className = 'date-filter-tab px-2.5 py-1 rounded-lg text-xs font-bold bg-white text-stone-800 shadow-xs transition';
       }
       renderOrders();
     }
@@ -971,9 +994,18 @@
       const container = document.getElementById('ordersContainer');
       const emptyState = document.getElementById('emptyState');
 
+      const now = new Date();
+      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const tomorrowObj = new Date(now);
+      tomorrowObj.setDate(tomorrowObj.getDate() + 1);
+      const tomorrowStr = `${tomorrowObj.getFullYear()}-${String(tomorrowObj.getMonth() + 1).padStart(2, '0')}-${String(tomorrowObj.getDate()).padStart(2, '0')}`;
+      const currentHhMm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
       const filtered = orders.filter(o => {
-        if (currentFilter === 'all') return true;
-        return o.status === currentFilter;
+        if (currentFilter !== 'all' && o.status !== currentFilter) return false;
+        if (currentDateFilter === 'today' && o.pickupDate !== todayStr) return false;
+        if (currentDateFilter === 'tomorrow' && o.pickupDate !== tomorrowStr) return false;
+        return true;
       });
 
       if (filtered.length === 0) {
@@ -997,6 +1029,10 @@
         const orderTime = o.createdAt ? new Date(o.createdAt).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' }) : '';
         const orderDate = o.createdAt ? new Date(o.createdAt).toLocaleDateString('zh-TW', { month: '2-digit', day: '2-digit' }) : '';
 
+        // 判斷是否為今日且已逾時
+        const isToday = o.pickupDate === todayStr;
+        const isOverdue = isToday && (o.status === 'new' || o.status === 'preparing') && o.pickupTime && (currentHhMm > o.pickupTime);
+
         return `
           <div class="bg-white rounded-2xl shadow-sm border border-stone-200 overflow-hidden flex flex-col justify-between hover:shadow-md transition">
             <!-- Order Header -->
@@ -1017,12 +1053,13 @@
               </div>
 
               <!-- Pickup Time Prominent -->
-              <div class="bg-emerald-50/80 border border-emerald-200 rounded-lg p-2.5 flex items-center justify-between text-xs">
-                <div class="flex items-center space-x-2 text-emerald-900 font-bold">
-                  <i class="fas fa-clock text-emerald-700 text-sm"></i>
+              <div class="${isOverdue ? 'bg-rose-50 border-rose-300' : 'bg-emerald-50/80 border-emerald-200'} border rounded-lg p-2.5 flex items-center justify-between text-xs">
+                <div class="flex items-center space-x-2 ${isOverdue ? 'text-rose-900' : 'text-emerald-900'} font-bold">
+                  <i class="fas fa-clock ${isOverdue ? 'text-rose-600' : 'text-emerald-700'} text-sm"></i>
                   <span>預約取餐：${o.pickupDate || '今日'} ${o.pickupTime || '盡速'}</span>
+                  ${isOverdue ? '<span class="bg-rose-600 text-white text-[10px] font-black px-1.5 py-0.2 rounded animate-pulse">⚠️ 已逾時</span>' : ''}
                 </div>
-                <span class="text-emerald-700 text-[11px] font-normal">下單 ${orderTime}</span>
+                <span class="${isOverdue ? 'text-rose-600' : 'text-emerald-700'} text-[11px] font-normal">下單 ${orderTime}</span>
               </div>
             </div>
 

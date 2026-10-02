@@ -218,7 +218,7 @@
 
         <!-- 付款方式 (嚴格落實只收現金/LINE Pay Money) -->
         <div class="space-y-2">
-          <label class="block font-bold text-stone-700">4. 付款方式 (門市僅限外帶)</label>
+          <label class="block font-bold text-stone-700">6. 付款方式 (門市僅限外帶)</label>
           <div class="grid grid-cols-2 gap-2.5">
             <label class="flex items-center space-x-2 border-2 border-orange-400 bg-orange-50/50 p-3 rounded-xl cursor-pointer">
               <input type="radio" name="payment" value="現金付款" checked class="text-orange-500 focus:ring-orange-400">
@@ -234,13 +234,13 @@
         <!-- 集點優惠券折抵 -->
         <div class="space-y-2 bg-amber-50 p-3 rounded-2xl border border-amber-200">
           <label class="block font-bold text-amber-900 text-xs flex items-center justify-between">
-            <span>🎁 集點卡優惠折抵</span>
+            <span>7. 🎁 集點卡優惠折抵</span>
             <span class="text-[11px] text-amber-700">滿額回饋</span>
           </label>
           <select id="discount-select" onchange="calculateFinalTotal()" class="w-full px-3 py-2 border border-amber-300 rounded-xl text-xs font-bold bg-white text-stone-800">
             <option value="0">無使用優惠券 (NT$ 0)</option>
             <option value="20">集點滿額折抵 20 元 (-NT$ 20)</option>
-            <option value="item">集點滿點免費折抵乙份優格碗 (-NT$ 130)</option>
+            <option value="item">集點滿點免費折抵乙份優格碗 (最高折抵 NT$ 140)</option>
           </select>
         </div>
 
@@ -248,13 +248,13 @@
         <div class="bg-stone-50 p-3 rounded-xl border border-stone-200">
           <label class="flex items-center space-x-2.5 cursor-pointer">
             <input type="checkbox" id="eco-bag" checked class="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500">
-            <span class="text-xs font-bold text-stone-700">🌱 響應環保，我會自備購物提袋</span>
+            <span class="text-xs font-bold text-stone-700">8. 🌱 響應環保，我會自備購物提袋</span>
           </label>
         </div>
 
         <!-- 備註 -->
         <div class="space-y-1.5">
-          <label class="block font-bold text-stone-700 text-xs">備註說明 (選填)</label>
+          <label class="block font-bold text-stone-700 text-xs">9. 備註說明 (選填)</label>
           <input type="text" id="order-note" placeholder="例如：附木湯匙、不要肉桂粉等" class="w-full px-3 py-2 border border-stone-300 rounded-xl text-xs">
         </div>
 
@@ -400,27 +400,45 @@
 
     function initDefaultDates() {
       const now = new Date();
-      // 隔天日期預設
-      const tomorrow = new Date(now);
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      
-      const yyyy = tomorrow.getFullYear();
-      const mm = String(tomorrow.getMonth() + 1).padStart(2, '0');
-      const dd = String(tomorrow.getDate()).padStart(2, '0');
-      document.getElementById('pickup-date').value = `${yyyy}-${mm}-${dd}`;
+      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const dateInput = document.getElementById('pickup-date');
+      dateInput.min = todayStr; // 禁止點選過去日期
+
+      // 智慧預設：若今天是週五/週六/週日，自動預設下週一；平日預設明日
+      const targetDate = new Date(now);
+      const currentDay = now.getDay(); // 0 是週日, 5 是週五, 6 是週六
+      if (currentDay === 5) {
+        targetDate.setDate(targetDate.getDate() + 3); // 週五點餐 -> 預設下週一
+      } else if (currentDay === 6) {
+        targetDate.setDate(targetDate.getDate() + 2); // 週六點餐 -> 預設下週一
+      } else if (currentDay === 0) {
+        targetDate.setDate(targetDate.getDate() + 1); // 週日點餐 -> 預設下週一
+      } else {
+        targetDate.setDate(targetDate.getDate() + 1); // 週一至四 -> 預設明日
+      }
+
+      const yyyy = targetDate.getFullYear();
+      const mm = String(targetDate.getMonth() + 1).padStart(2, '0');
+      const dd = String(targetDate.getDate()).padStart(2, '0');
+      dateInput.value = `${yyyy}-${mm}-${dd}`;
       checkPickupDate();
     }
 
     function checkPickupDate() {
-      const dateVal = document.getElementById('pickup-date').value;
+      const dateInput = document.getElementById('pickup-date');
+      const dateVal = dateInput.value;
       if (!dateVal) return;
-      const d = new Date(dateVal);
-      const day = d.getDay(); // 0 is Sunday, 6 is Saturday
+      const [y, m, d] = dateVal.split('-').map(Number);
+      const chosen = new Date(y, m - 1, d);
+      const day = chosen.getDay(); // 0 is Sunday, 6 is Saturday
       const warning = document.getElementById('date-warning');
       if (day === 0 || day === 6) {
         warning.classList.remove('hidden');
+        warning.innerText = '⚠️ 我們六日與國定假日公休，請選擇平日（週一至週五）！';
+        dateInput.classList.add('border-red-500', 'bg-red-50');
       } else {
         warning.classList.add('hidden');
+        dateInput.classList.remove('border-red-500', 'bg-red-50');
       }
     }
 
@@ -590,9 +608,15 @@
 
     function calculateFinalTotal() {
       let subtotal = 0;
+      let maxBowlPrice = 0;
       for (const [id, qty] of Object.entries(cart)) {
         const item = MENU_DATA.find(m => m.id === id);
-        if (item) subtotal += item.price * qty;
+        if (item) {
+          subtotal += item.price * qty;
+          if (item.category === 'bowls' || item.price >= 110) {
+            if (item.price > maxBowlPrice) maxBowlPrice = item.price;
+          }
+        }
       }
 
       const discountType = document.getElementById('discount-select').value;
@@ -602,7 +626,8 @@
         discountAmount = Math.min(20, subtotal);
       } else if (discountType === 'item') {
         // 折抵單份最貴品項 (最高140元)
-        discountAmount = Math.min(130, subtotal);
+        const freeItemDiscount = maxBowlPrice > 0 ? Math.min(maxBowlPrice, 140) : 130;
+        discountAmount = Math.min(freeItemDiscount, subtotal);
       }
 
       const finalTotal = Math.max(0, subtotal - discountAmount);
@@ -635,6 +660,16 @@
       }
       if (!date) {
         alert("請選擇預約取餐日期！");
+        return;
+      }
+
+      // 嚴格攔截六日公休下單
+      const [y, m, d] = date.split('-').map(Number);
+      const chosenDate = new Date(y, m - 1, d);
+      const chosenDay = chosenDate.getDay();
+      if (chosenDay === 0 || chosenDay === 6) {
+        alert("⚠️ 很抱歉，優穀日每週六、週日與國定假日公休！\n\n請選擇週一至週五平日預約取餐，感謝您的體諒 😊");
+        document.getElementById('pickup-date').focus();
         return;
       }
 

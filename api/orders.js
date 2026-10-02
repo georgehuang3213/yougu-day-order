@@ -225,12 +225,14 @@ async function sendLineNotificationToStore(order) {
     `  ${idx + 1}. ${item.name} × ${item.quantity || item.qty || 1} (NT$${(item.price || 0) * (item.quantity || item.qty || 1)})`
   ).join("\n");
 
+  const phoneStr = order.customerPhone || order.phone || "未留";
   const text =
 `🔔【優穀日・新訂單即時通知】
 
 單號：#${order.orderId || order.id}
 訂購人：${order.customerName}
-電話：${order.customerPhone || order.phone || "未留"}
+聯絡電話：${phoneStr}
+📞 點擊通話：tel:${phoneStr}
 取餐時間：${order.pickupDate || "今日"} ${order.pickupTime || "盡速"}
 付款方式：${order.paymentMethod === "linepay" || order.paymentMethod === "LINE Pay Money" ? "LINE Pay Money" : "現場現金付款"}
 ${order.bringEcoBag || order.needBag ? "自備餐袋：✅ 是\n" : ""}${order.discountAmount > 0 ? `優惠折抵：-NT$ ${order.discountAmount} (${order.discountCode || ""})\n` : ""}合計金額：NT$ ${order.finalTotal || order.total || 0}
