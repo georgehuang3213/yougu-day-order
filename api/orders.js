@@ -215,7 +215,7 @@ function normalizeOrder(data, customId = null) {
 // ─────────────────────────────────────────────────────────
 async function sendLineNotificationToStore(order) {
   const tgToken  = (process.env.TELEGRAM_BOT_TOKEN || "8711630273:AAGf9_Okw8pRsUwP4I_3wpWzKSO14vL3Cmc").trim();
-  const tgChatId = (process.env.TELEGRAM_CHAT_ID || "5641997646").trim();
+  const tgChatId = (process.env.TELEGRAM_CHAT_ID || "-5155842492").trim();
   if (!tgToken || !tgChatId) {
     console.warn("Telegram Token 或 Chat ID 未設定，略過推播");
     return;
