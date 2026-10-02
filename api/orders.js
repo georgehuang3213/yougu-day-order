@@ -62,6 +62,9 @@ function getR2Client() {
       accessKeyId: accessKeyId,
       secretAccessKey: secretAccessKey,
     },
+    // 修正 AWS SDK v3 與 Cloudflare R2 的 SSL/checksum 相容性問題
+    requestChecksumCalculation: "when_required",
+    responseChecksumValidation: "when_required",
   });
 }
 

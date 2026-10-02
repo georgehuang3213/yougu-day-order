@@ -12,6 +12,8 @@ function getR2Client() {
     region: "auto",
     endpoint: endpoint,
     credentials: { accessKeyId, secretAccessKey },
+    requestChecksumCalculation: "when_required",
+    responseChecksumValidation: "when_required",
   });
 }
 

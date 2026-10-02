@@ -83,6 +83,8 @@ function getR2Client() {
       accessKeyId: accessKeyId,
       secretAccessKey: secretAccessKey,
     },
+    requestChecksumCalculation: "when_required",
+    responseChecksumValidation: "when_required",
   });
 }
 
