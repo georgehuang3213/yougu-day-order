@@ -243,20 +243,27 @@ ${(order.notes || order.note) ? `\n備註：${order.notes || order.note}\n` : ""
 👉 點擊開啟後台接單：
 https://yougu-day-order.vercel.app/admin`;
 
-  try {
-    const res = await fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: tgChatId, text })
-    });
-    if (!res.ok) {
-      console.warn("Telegram 推播狀態非 200:", res.status, await res.text());
-    } else {
-      console.log("✅ Telegram 推播成功發送！");
-    }
-  } catch (err) {
-    console.warn("Telegram 推播網路錯誤:", err.message);
-  }
+  // 支援多個 Chat ID 或群組 ID（逗號分隔）
+  const chatIds = tgChatId.split(/[,;\s]+/).map(s => s.trim()).filter(Boolean);
+
+  await Promise.all(
+    chatIds.map(async (cid) => {
+      try {
+        const res = await fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chat_id: cid, text })
+        });
+        if (!res.ok) {
+          console.warn(`Telegram 推播至 ${cid} 狀態非 200:`, res.status, await res.text());
+        } else {
+          console.log(`✅ Telegram 成功推播至 ${cid}！`);
+        }
+      } catch (err) {
+        console.warn(`Telegram 推播至 ${cid} 網路錯誤:`, err.message);
+      }
+    })
+  );
 }
 
 // ─────────────────────────────────────────────────────────
