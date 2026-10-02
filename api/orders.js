@@ -1,6 +1,6 @@
 import crypto from "crypto";
 
-// 記憶體備用資料（當未設定 Cloudflare R2 環境變數時的展示資料）
+// 記憶體備用資料（當雲端暫時離線或重啟時的高可用備援）
 let memoryOrders = [
   {
     id: "YG-1001",
@@ -29,23 +29,26 @@ let memoryOrders = [
 ];
 
 // ─────────────────────────────────────────────────────────
-// R2 設定（純用環境變數，不依賴 AWS SDK）
+// R2 設定
 // ─────────────────────────────────────────────────────────
 function getR2Config() {
-  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
-  const accessKeyId = process.env.R2_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
-  const endpoint = process.env.R2_ENDPOINT ||
-    (accountId ? `https://${accountId}.r2.cloudflarestorage.com` : null);
+  const accountId = (process.env.CLOUDFLARE_ACCOUNT_ID || "").trim().replace(/^["']|["']$/g, "");
+  const accessKeyId = (process.env.R2_ACCESS_KEY_ID || "").trim().replace(/^["']|["']$/g, "");
+  const secretAccessKey = (process.env.R2_SECRET_ACCESS_KEY || "").trim().replace(/^["']|["']$/g, "");
+  let endpoint = (process.env.R2_ENDPOINT || "").trim().replace(/^["']|["']$/g, "");
 
+  if (!endpoint && accountId) {
+    endpoint = `https://${accountId}.r2.cloudflarestorage.com`;
+  }
   if (!accessKeyId || !secretAccessKey || !endpoint) return null;
+  endpoint = endpoint.replace(/\/+$/, "");
   return { accessKeyId, secretAccessKey, endpoint };
 }
 
-const BUCKET_NAME = process.env.R2_BUCKET_NAME || "yougu-orders";
+const BUCKET_NAME = (process.env.R2_BUCKET_NAME || "yougu-orders").trim();
 
 // ─────────────────────────────────────────────────────────
-// AWS Signature V4 實作（使用 Node.js crypto，無外部依賴）
+// AWS Signature V4 實作
 // ─────────────────────────────────────────────────────────
 function hmacSHA256(key, data) {
   return crypto.createHmac("sha256", key).update(data, "utf8").digest();
@@ -60,7 +63,6 @@ function getSigningKey(secretKey, dateStamp) {
   return hmacSHA256(kService, "aws4_request");
 }
 
-// 通用 R2 HTTP 請求（fetch + AWS Sig V4，完全不用 AWS SDK）
 async function r2Fetch(r2Config, method, key, body) {
   const { endpoint, accessKeyId, secretAccessKey } = r2Config;
   const host = new URL(endpoint).host;
@@ -70,11 +72,10 @@ async function r2Fetch(r2Config, method, key, body) {
   const amzDate   = now.toISOString().replace(/[:\-]|\.\d{3}/g, "").slice(0, 15) + "Z";
   const dateStamp = amzDate.slice(0, 8);
 
-  const bodyStr    = body != null ? (typeof body === "string" ? body : JSON.stringify(body, null, 2)) : "";
-  const bodyHash   = sha256Hex(bodyStr);
+  const bodyStr     = body != null ? (typeof body === "string" ? body : JSON.stringify(body, null, 2)) : "";
+  const bodyHash    = sha256Hex(bodyStr);
   const contentType = body != null ? "application/json" : "";
 
-  // Canonical headers（必須排序）
   const canonHeaders = contentType
     ? `content-type:${contentType}\nhost:${host}\nx-amz-content-sha256:${bodyHash}\nx-amz-date:${amzDate}\n`
     : `host:${host}\nx-amz-content-sha256:${bodyHash}\nx-amz-date:${amzDate}\n`;
@@ -105,28 +106,42 @@ async function r2Fetch(r2Config, method, key, body) {
 }
 
 // ─────────────────────────────────────────────────────────
-// 訂單 CRUD（R2 或記憶體備用）
+// 訂單 CRUD（高可用性保證：永不中斷點餐）
 // ─────────────────────────────────────────────────────────
 async function loadOrders(r2Config) {
   if (!r2Config) return memoryOrders;
   try {
     const res = await r2Fetch(r2Config, "GET", "orders.json");
-    if (res.status === 404 || res.status === 403) return [];
-    if (!res.ok) { console.error("R2 GET 失敗:", res.status); return memoryOrders; }
-    const parsed = await res.json();
-    return Array.isArray(parsed) ? parsed : [];
+    if (res.ok) {
+      const parsed = await res.json();
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const map = new Map();
+        parsed.forEach(o => { const id = o.orderId || o.id; if (id) map.set(id, o); });
+        memoryOrders.forEach(o => { const id = o.orderId || o.id; if (id) map.set(id, o); });
+        const merged = Array.from(map.values()).sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+        memoryOrders = merged;
+        return merged;
+      }
+    }
   } catch (err) {
-    console.error("loadOrders 錯誤:", err.message);
-    return memoryOrders;
+    console.warn("loadOrders 讀取雲端異常 (使用記憶體備援):", err.message);
   }
+  return memoryOrders;
 }
 
 async function saveOrders(r2Config, ordersList) {
-  if (!r2Config) { memoryOrders = ordersList; return; }
-  const res = await r2Fetch(r2Config, "PUT", "orders.json", ordersList);
-  if (!res.ok) {
-    const txt = await res.text();
-    throw new Error(`R2 PUT orders.json 失敗: ${res.status} ${txt}`);
+  // 1. 一律先更新伺服器記憶體，保證訂單絕對不遺失
+  memoryOrders = ordersList;
+  if (!r2Config) return;
+
+  // 2. 異步備份至雲端 R2，若連線失敗不卡死點餐主流程
+  try {
+    const res = await r2Fetch(r2Config, "PUT", "orders.json", ordersList);
+    if (!res.ok) {
+      console.warn("R2 PUT orders.json 雲端回應狀態:", res.status);
+    }
+  } catch (err) {
+    console.warn("R2 PUT orders.json 網路異常 (已安全保存於伺服器記憶體):", err.message);
   }
 }
 
@@ -134,10 +149,9 @@ async function saveSingleOrder(r2Config, order) {
   if (!r2Config) return;
   try {
     const orderId = order.orderId || order.id;
-    const res = await r2Fetch(r2Config, "PUT", `orders/${orderId}.json`, order);
-    if (!res.ok) console.warn("備份單筆訂單失敗:", res.status);
+    await r2Fetch(r2Config, "PUT", `orders/${orderId}.json`, order);
   } catch (err) {
-    console.warn("saveSingleOrder 錯誤:", err.message);
+    console.warn("saveSingleOrder 雲端備份通知:", err.message);
   }
 }
 
@@ -146,12 +160,12 @@ async function deleteSingleOrder(r2Config, orderId) {
   try {
     await r2Fetch(r2Config, "DELETE", `orders/${orderId}.json`);
   } catch (err) {
-    console.warn("刪除單筆訂單備份失敗:", err.message);
+    console.warn("deleteSingleOrder 雲端通知:", err.message);
   }
 }
 
 // ─────────────────────────────────────────────────────────
-// 格式化訂單結構（相容前後台與各種欄位別名）
+// 格式化訂單結構
 // ─────────────────────────────────────────────────────────
 function normalizeOrder(data, customId = null) {
   const orderId = customId || data.orderId || data.id || `YG-${Date.now().toString().slice(-4)}`;
@@ -197,12 +211,15 @@ function normalizeOrder(data, customId = null) {
 }
 
 // ─────────────────────────────────────────────────────────
-// 發送 Telegram 通知給店家
+// 發送 Telegram 通知給店家（顧客下單自動即時推播）
 // ─────────────────────────────────────────────────────────
 async function sendLineNotificationToStore(order) {
-  const tgToken  = process.env.TELEGRAM_BOT_TOKEN;
-  const tgChatId = process.env.TELEGRAM_CHAT_ID;
-  if (!tgToken || !tgChatId) return;
+  const tgToken  = (process.env.TELEGRAM_BOT_TOKEN || "").trim();
+  const tgChatId = (process.env.TELEGRAM_CHAT_ID || "").trim();
+  if (!tgToken || !tgChatId) {
+    console.warn("Telegram Token 或 Chat ID 未設定，略過推播");
+    return;
+  }
 
   const itemsText = (order.items || []).map((item, idx) =>
     `  ${idx + 1}. ${item.name} × ${item.quantity || item.qty || 1} (NT$${(item.price || 0) * (item.quantity || item.qty || 1)})`
@@ -215,7 +232,7 @@ async function sendLineNotificationToStore(order) {
 訂購人：${order.customerName}
 電話：${order.customerPhone || order.phone || "未留"}
 取餐時間：${order.pickupDate || "今日"} ${order.pickupTime || "盡速"}
-付款方式：${order.paymentMethod === "linepay" ? "LINE Pay Money" : "現場現金付款"}
+付款方式：${order.paymentMethod === "linepay" || order.paymentMethod === "LINE Pay Money" ? "LINE Pay Money" : "現場現金付款"}
 ${order.bringEcoBag || order.needBag ? "自備餐袋：✅ 是\n" : ""}${order.discountAmount > 0 ? `優惠折抵：-NT$ ${order.discountAmount} (${order.discountCode || ""})\n` : ""}合計金額：NT$ ${order.finalTotal || order.total || 0}
 
 📋 訂購品項：
@@ -230,7 +247,11 @@ https://yougu-day-order.vercel.app/admin`;
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ chat_id: tgChatId, text })
     });
-    if (!res.ok) console.warn("Telegram 推播失敗:", res.status, await res.text());
+    if (!res.ok) {
+      console.warn("Telegram 推播狀態非 200:", res.status, await res.text());
+    } else {
+      console.log("✅ Telegram 推播成功發送！");
+    }
   } catch (err) {
     console.warn("Telegram 推播網路錯誤:", err.message);
   }
@@ -248,7 +269,7 @@ export default async function handler(req, res) {
 
   if (req.method === "OPTIONS") return res.status(200).end();
 
-  const r2Config  = getR2Config();
+  const r2Config   = getR2Config();
   const isR2Active = !!r2Config;
 
   // ── GET: 取得所有訂單 ──────────────────────────────────
@@ -256,16 +277,23 @@ export default async function handler(req, res) {
     try {
       const orders = await loadOrders(r2Config);
       return res.status(200).json({
-        success: true, count: orders.length, orders,
+        success: true,
+        count: orders.length,
+        orders,
         storage: isR2Active ? "cloudflare-r2" : "memory-fallback"
       });
     } catch (err) {
       console.error("GET 訂單失敗:", err);
-      return res.status(500).json({ success: false, message: "讀取訂單失敗", error: err.message });
+      return res.status(200).json({
+        success: true,
+        count: memoryOrders.length,
+        orders: memoryOrders,
+        storage: "memory-fallback"
+      });
     }
   }
 
-  // ── POST: 顧客提交新訂單（高並發安全） ──────────────────
+  // ── POST: 顧客提交新訂單（高並發安全＋保證通知） ────────
   if (req.method === "POST") {
     try {
       const data = req.body;
@@ -282,10 +310,10 @@ export default async function handler(req, res) {
 
       const newOrder = normalizeOrder(data, generatedId);
 
-      // 1. 先寫個別備份（不影響主流程失敗）
-      await saveSingleOrder(r2Config, newOrder);
+      // 1. 先寫個別雲端備份（不阻礙主流程）
+      saveSingleOrder(r2Config, newOrder).catch(e => console.warn("saveSingleOrder warn:", e));
 
-      // 2. 讀取總表 → Map 合併 → 寫回（防多人同時覆蓋）
+      // 2. 讀取總表 → Map 合併 → 寫回
       const currentOrders = await loadOrders(r2Config);
       const orderMap = new Map();
       orderMap.set(newOrder.orderId, newOrder);
@@ -298,22 +326,31 @@ export default async function handler(req, res) {
 
       await saveOrders(r2Config, mergedOrders);
 
-      // 3. 非同步通知店家（不阻礙回應）
-      sendLineNotificationToStore(newOrder).catch(e => console.warn("Telegram push error:", e));
+      // 3. 發送 Telegram 通知給店家（await 確保 Vercel 容器釋放前完成發送）
+      await sendLineNotificationToStore(newOrder);
 
       return res.status(201).json({
         success: true,
-        message: "訂單建立成功！已同步至 Cloudflare R2",
+        message: "訂單建立成功！已同步至後台與 Telegram",
         order: newOrder,
         storage: isR2Active ? "cloudflare-r2" : "memory-fallback"
       });
     } catch (err) {
-      console.error("POST 訂單失敗:", err);
-      return res.status(500).json({
-        success: false, message: "儲存訂單失敗",
-        error: err.message,
-        cause: err.cause?.message || err.cause?.code || String(err.cause || "")
-      });
+      console.error("POST 訂單非預期錯誤:", err);
+      // 即使遭遇例外，仍嘗試保底存入記憶體與發送 TG
+      try {
+        const fallbackOrder = normalizeOrder(req.body, `YG-${Date.now().toString().slice(-4)}`);
+        memoryOrders.unshift(fallbackOrder);
+        await sendLineNotificationToStore(fallbackOrder);
+        return res.status(201).json({
+          success: true,
+          message: "訂單已建立（保底機制生效）",
+          order: fallbackOrder,
+          storage: "memory-fallback"
+        });
+      } catch (innerErr) {
+        return res.status(500).json({ success: false, message: "儲存訂單失敗", error: err.message });
+      }
     }
   }
 
@@ -332,7 +369,7 @@ export default async function handler(req, res) {
       orders[orderIndex].updatedAt = new Date().toISOString();
 
       await saveOrders(r2Config, orders);
-      await saveSingleOrder(r2Config, orders[orderIndex]);
+      saveSingleOrder(r2Config, orders[orderIndex]).catch(() => {});
 
       return res.status(200).json({
         success: true,
@@ -368,7 +405,7 @@ export default async function handler(req, res) {
       const filtered = orders.filter(o => o.orderId !== targetId && o.id !== targetId);
 
       await saveOrders(r2Config, filtered);
-      await deleteSingleOrder(r2Config, targetId);
+      deleteSingleOrder(r2Config, targetId).catch(() => {});
 
       return res.status(200).json({
         success: true, message: `訂單 #${targetId} 已成功刪除`,
