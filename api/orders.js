@@ -32,10 +32,17 @@ let memoryOrders = [
 // R2 設定
 // ─────────────────────────────────────────────────────────
 function getR2Config() {
-  const accountId = (process.env.CLOUDFLARE_ACCOUNT_ID || "").trim().replace(/^["']|["']$/g, "");
+  let accountId = (process.env.CLOUDFLARE_ACCOUNT_ID || "8487a37db0822819e2e9a080ed2d437b").trim().replace(/^["']|["']$/g, "");
+  if (accountId === "8487a37db0822819e2c9a080cd2d437b") {
+    accountId = "8487a37db0822819e2e9a080ed2d437b";
+  }
   const accessKeyId = (process.env.R2_ACCESS_KEY_ID || "").trim().replace(/^["']|["']$/g, "");
   const secretAccessKey = (process.env.R2_SECRET_ACCESS_KEY || "").trim().replace(/^["']|["']$/g, "");
   let endpoint = (process.env.R2_ENDPOINT || "").trim().replace(/^["']|["']$/g, "");
+
+  if (endpoint.includes("8487a37db0822819e2c9a080cd2d437b")) {
+    endpoint = endpoint.replace("8487a37db0822819e2c9a080cd2d437b", "8487a37db0822819e2e9a080ed2d437b");
+  }
 
   if (!endpoint && accountId) {
     endpoint = `https://${accountId}.r2.cloudflarestorage.com`;
