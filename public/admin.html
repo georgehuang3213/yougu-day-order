@@ -89,7 +89,7 @@
           <label class="block text-xs font-bold text-stone-700 mb-1">管理帳號</label>
           <div class="relative">
             <i class="fas fa-user absolute left-3.5 top-3 text-stone-400 text-xs"></i>
-            <input type="text" id="loginUsername" required class="w-full pl-9 pr-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-emerald-600" placeholder="預設帳號：admin" autocomplete="username" autofocus>
+            <input type="text" id="loginUsername" required class="w-full pl-9 pr-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-emerald-600" placeholder="請輸入帳號" autocomplete="username" autofocus>
           </div>
         </div>
 
@@ -97,7 +97,7 @@
           <label class="block text-xs font-bold text-stone-700 mb-1">管理密碼</label>
           <div class="relative">
             <i class="fas fa-lock absolute left-3.5 top-3 text-stone-400 text-xs"></i>
-            <input type="password" id="loginPassword" required class="w-full pl-9 pr-9 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-emerald-600" placeholder="預設密碼：yougu888" autocomplete="current-password">
+            <input type="password" id="loginPassword" required class="w-full pl-9 pr-9 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-emerald-600" placeholder="請輸入密碼" autocomplete="current-password">
             <button type="button" onclick="togglePasswordVisibility()" class="absolute right-3 top-2.5 text-stone-400 hover:text-stone-600">
               <i id="pwdToggleIcon" class="fas fa-eye text-xs"></i>
             </button>
@@ -112,11 +112,6 @@
           <i class="fas fa-sign-in-alt"></i>
           <span>登入系統</span>
         </button>
-
-        <div class="pt-2 text-center text-[11px] text-stone-400 border-t border-stone-100 mt-2">
-          預設帳號：<span class="font-mono font-semibold text-stone-600">admin</span><br>
-          預設密碼：<span class="font-mono font-semibold text-stone-600">yougu888</span>
-        </div>
       </form>
     </div>
   </div>
@@ -1422,38 +1417,40 @@ ${order.notes || order.note ? `備註：${order.notes || order.note}\n` : ''}
     }
 
     // ==========================================
-    // 加密驗證邏輯 (Web Crypto API SHA-256 + Salt)
+    // 伺服器端驗證（帳密由 Vercel 環境變數 ADMIN_USERNAME / ADMIN_PASSWORD 決定）
     // ==========================================
-    const AUTH_SALT = "yougu_secret_salt_2026";
-    // 預設帳號: admin, 預設密碼: yougu888 的加鹽雜湊值 (完全無明文密碼)
-    const DEFAULT_AUTH_HASH = "39851c6b89a7b7786c050106cd2ee2522f143f0d4c4e201dee606f16b0d76f07";
+    const TOKEN_KEY = 'yougu_admin_token';
 
-    // 使用 SHA-256 進行單向安全加密雜湊
-    async function hashCredentials(username, password) {
-      const text = `${(username || '').trim().toLowerCase()}:${password}:${AUTH_SALT}`;
-      const msgBuffer = new TextEncoder().encode(text);
-      const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-      const hashArray = Array.from(new Uint8Array(hashBuffer));
-      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-    }
+    function getToken() { return sessionStorage.getItem(TOKEN_KEY) || ''; }
 
-    function getStoredAuthHash() {
-      return localStorage.getItem('yougu_auth_hash') || DEFAULT_AUTH_HASH;
-    }
+    // 所有 /api/ 請求自動附上登入憑證；收到 401 代表憑證失效，回到登入畫面
+    const _origFetch = window.fetch.bind(window);
+    window.fetch = async function (input, init = {}) {
+      const url = typeof input === 'string' ? input : (input && input.url) || '';
+      if (url.startsWith('/api/') && !url.startsWith('/api/auth')) {
+        const headers = new Headers(init.headers || {});
+        const t = getToken();
+        if (t) headers.set('Authorization', 'Bearer ' + t);
+        init = { ...init, headers };
+      }
+      const res = await _origFetch(input, init);
+      if (res.status === 401 && url.startsWith('/api/') && !url.startsWith('/api/auth')) {
+        sessionStorage.removeItem(TOKEN_KEY);
+        const modal = document.getElementById('loginModal');
+        if (modal) modal.classList.remove('hidden');
+      }
+      return res;
+    };
 
     function checkAuth() {
-      const token = sessionStorage.getItem('yougu_session_token');
-      const storedHash = getStoredAuthHash();
-      const isAuthed = !!token && token === storedHash;
+      const isAuthed = !!getToken();
       const modal = document.getElementById('loginModal');
-
       if (isAuthed) {
         if (modal) modal.classList.add('hidden');
         return true;
-      } else {
-        if (modal) modal.classList.remove('hidden');
-        return false;
       }
+      if (modal) modal.classList.remove('hidden');
+      return false;
     }
 
     async function handleLogin(event) {
@@ -1461,27 +1458,33 @@ ${order.notes || order.note ? `備註：${order.notes || order.note}\n` : ''}
       const u = document.getElementById('loginUsername').value.trim();
       const p = document.getElementById('loginPassword').value;
       const errorDiv = document.getElementById('loginError');
-
-      const computedHash = await hashCredentials(u, p);
-      const targetHash = getStoredAuthHash();
-
-      if (computedHash === targetHash) {
-        sessionStorage.setItem('yougu_session_token', computedHash);
-        if (errorDiv) errorDiv.classList.add('hidden');
-        document.getElementById('loginModal').classList.add('hidden');
-        document.getElementById('loginPassword').value = '';
-        fetchOrders(true);
-      } else {
-        if (errorDiv) {
-          errorDiv.classList.remove('hidden');
-          errorDiv.innerText = "⚠️ 帳號或密碼錯誤，請重新輸入！";
+      const showErr = (msg) => {
+        if (errorDiv) { errorDiv.classList.remove('hidden'); errorDiv.innerText = msg; }
+      };
+      try {
+        const res = await _origFetch('/api/auth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: u, password: p })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.token) {
+          sessionStorage.setItem(TOKEN_KEY, data.token);
+          if (errorDiv) errorDiv.classList.add('hidden');
+          document.getElementById('loginModal').classList.add('hidden');
+          document.getElementById('loginPassword').value = '';
+          fetchOrders(true);
+        } else {
+          showErr('⚠️ 帳號或密碼錯誤，請重新輸入！');
         }
+      } catch (e) {
+        showErr('⚠️ 無法連線至伺服器，請稍後再試');
       }
     }
 
     function handleLogout() {
       if (confirm('確定要登出店長後台系統嗎？')) {
-        sessionStorage.removeItem('yougu_session_token');
+        sessionStorage.removeItem(TOKEN_KEY);
         document.getElementById('loginPassword').value = '';
         const errorDiv = document.getElementById('loginError');
         if (errorDiv) errorDiv.classList.add('hidden');
@@ -1504,11 +1507,7 @@ ${order.notes || order.note ? `備註：${order.notes || order.note}\n` : ''}
     }
 
     function openChangePasswordModal() {
-      document.getElementById('currPwdInput').value = '';
-      document.getElementById('newPwdInput').value = '';
-      const err = document.getElementById('changePwdError');
-      if (err) err.classList.add('hidden');
-      document.getElementById('changePwdModal').classList.remove('hidden');
+      alert('密碼現在由伺服器管理。\n請到 Vercel → Settings → Environment Variables 修改 ADMIN_PASSWORD（及 ADMIN_USERNAME），重新部署後生效。');
     }
 
     function closeChangePasswordModal() {
@@ -1516,38 +1515,9 @@ ${order.notes || order.note ? `備註：${order.notes || order.note}\n` : ''}
     }
 
     async function saveNewPassword(event) {
-      event.preventDefault();
-      const curr = document.getElementById('currPwdInput').value;
-      const newPwd = document.getElementById('newPwdInput').value;
-      const err = document.getElementById('changePwdError');
-
-      // 驗證目前密碼
-      const currHash = await hashCredentials('admin', curr);
-      const targetHash = getStoredAuthHash();
-
-      if (currHash !== targetHash) {
-        if (err) {
-          err.innerText = "目前密碼輸入不正確！";
-          err.classList.remove('hidden');
-        }
-        return;
-      }
-
-      if (!newPwd || newPwd.length < 4) {
-        if (err) {
-          err.innerText = "新密碼長度至少需 4 個字元！";
-          err.classList.remove('hidden');
-        }
-        return;
-      }
-
-      // 加密儲存新雜湊
-      const newHash = await hashCredentials('admin', newPwd);
-      localStorage.setItem('yougu_auth_hash', newHash);
-      sessionStorage.setItem('yougu_session_token', newHash);
-
-      alert("密碼已透過 SHA-256 加密完成更新！");
+      if (event) event.preventDefault();
       closeChangePasswordModal();
+      openChangePasswordModal();
     }
 
     // ==========================================
@@ -2249,7 +2219,7 @@ ${order.notes || order.note ? `備註：${order.notes || order.note}\n` : ''}
       }
       // Poll every 8 seconds for new orders (only if authenticated)
       pollInterval = setInterval(() => {
-        if (sessionStorage.getItem('yougu_session_token') === getStoredAuthHash()) {
+        if (getToken()) {
           fetchOrders(false);
         }
       }, 8000);

@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { requireAdmin } from "./_auth.js";
 
 // 記憶體備用資料（當雲端暫時離線或重啟時的高可用備援）
 let memoryOrders = [
@@ -369,9 +370,12 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS,PATCH,DELETE,POST,PUT");
   res.setHeader("Access-Control-Allow-Headers",
-    "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version");
+    "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization");
 
   if (req.method === "OPTIONS") return res.status(200).end();
+
+  // 顧客只能新增訂單；讀取／修改／刪除須管理員登入
+  if (req.method !== "POST" && !requireAdmin(req, res)) return;
 
   const r2Config   = getR2Config();
   const isR2Active = !!r2Config;
