@@ -71,8 +71,6 @@ function getSigningKey(secretKey, dateStamp) {
   return hmacSHA256(kService, "aws4_request");
 }
 
-let lastR2Trace = {};
-
 async function r2Fetch(r2Config, method, key, body) {
   const { endpoint, accessKeyId, secretAccessKey } = r2Config;
   const host = new URL(endpoint).host;
@@ -108,16 +106,6 @@ async function r2Fetch(r2Config, method, key, body) {
     "x-amz-content-sha256": bodyHash,
   };
   if (contentType) headers["content-type"] = contentType;
-
-  lastR2Trace = {
-    url,
-    canonB64: Buffer.from(canonRequest).toString("base64"),
-    strToSignB64: Buffer.from(stringToSign).toString("base64"),
-    signKeyHex: signingKey.toString("hex"),
-    canonRequestHash,
-    stringToSign,
-    authHeader
-  };
 
   return fetch(url, {
     method,
@@ -168,8 +156,6 @@ async function listR2Keys(r2Config, prefix) {
 // ─────────────────────────────────────────────────────────
 // 訂單 CRUD（高可用性＋高並發防覆蓋保證：永不中斷、永不遺漏點餐）
 // ─────────────────────────────────────────────────────────
-let lastR2Debug = {};
-
 async function loadOrders(r2Config) {
   if (!r2Config) return memoryOrders;
   try {
@@ -178,14 +164,6 @@ async function loadOrders(r2Config) {
     // 1. 先讀取總表 orders.json
     try {
       const res = await r2Fetch(r2Config, "GET", "orders.json");
-      const resText = res.ok ? null : await res.text();
-      lastR2Debug = {
-        fetchOk: res.ok,
-        fetchStatus: res.status,
-        fetchText: resText,
-        emptySha: sha256Hex(""),
-        trace: lastR2Trace
-      };
       if (res.ok) {
         const parsed = await res.json();
         if (Array.isArray(parsed)) {
@@ -193,13 +171,6 @@ async function loadOrders(r2Config) {
         }
       }
     } catch (e) {
-      lastR2Debug = {
-        fetchError: e.message,
-        cause: e.cause ? (e.cause.message || String(e.cause)) : null,
-        code: e.cause?.code || null,
-        endpoint: r2Config ? r2Config.endpoint : null,
-        url: `${r2Config?.endpoint}/${BUCKET_NAME}/orders.json`
-      };
       console.warn("loadOrders 讀取 orders.json 警告:", e.message);
     }
 
@@ -410,8 +381,7 @@ export default async function handler(req, res) {
         success: true,
         count: orders.length,
         orders,
-        storage: isR2Active ? "cloudflare-r2" : "memory-fallback",
-        r2Debug: lastR2Debug
+        storage: isR2Active ? "cloudflare-r2" : "memory-fallback"
       });
     } catch (err) {
       console.error("GET 訂單失敗:", err);
