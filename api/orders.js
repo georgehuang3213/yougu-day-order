@@ -103,9 +103,8 @@ async function r2Fetch(r2Config, method, key, body) {
 
   lastR2Trace = {
     url,
-    canonHeaders,
-    signedHeaders,
-    canonRequest,
+    canonLines: canonRequest.split("\n"),
+    canonLineLengths: canonRequest.split("\n").map(l => l.length),
     canonRequestHash,
     stringToSign,
     authHeader
