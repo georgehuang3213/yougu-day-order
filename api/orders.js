@@ -185,7 +185,13 @@ async function loadOrders(r2Config) {
         }
       }
     } catch (e) {
-      lastR2Debug = { fetchError: e.message };
+      lastR2Debug = {
+        fetchError: e.message,
+        cause: e.cause ? (e.cause.message || String(e.cause)) : null,
+        code: e.cause?.code || null,
+        endpoint: r2Config ? r2Config.endpoint : null,
+        url: `${r2Config?.endpoint}/${BUCKET_NAME}/orders.json`
+      };
       console.warn("loadOrders 讀取 orders.json 警告:", e.message);
     }
 
