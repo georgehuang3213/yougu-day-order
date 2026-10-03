@@ -174,6 +174,7 @@ async function loadOrders(r2Config) {
         fetchOk: res.ok,
         fetchStatus: res.status,
         fetchText: resText,
+        emptySha: sha256Hex(""),
         trace: lastR2Trace
       };
       if (res.ok) {
