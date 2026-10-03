@@ -105,6 +105,7 @@ async function r2Fetch(r2Config, method, key, body) {
     canonHeaders,
     signedHeaders,
     canonRequest,
+    canonHex: Buffer.from(canonRequest).toString('hex'),
     stringToSign,
     authHeader
   };
