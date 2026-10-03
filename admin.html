@@ -66,6 +66,13 @@
         size: auto;
       }
     }
+    @keyframes slideUp {
+      from { transform: translateY(100%); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    .animate-slide-up {
+      animation: slideUp 0.3s ease-out;
+    }
   </style>
 </head>
 <body class="bg-stone-100 min-h-screen text-stone-800 antialiased flex flex-col">
@@ -292,7 +299,7 @@
             <span class="text-xs text-stone-400">共售出 <span id="repUniqueItemsCount" class="font-bold text-stone-700">0</span> 種品項</span>
           </div>
 
-          <div class="border border-stone-200 rounded-xl overflow-hidden bg-white">
+          <div class="border border-stone-200 rounded-xl overflow-hidden overflow-x-auto bg-white">
             <table class="w-full text-left text-xs">
               <thead class="bg-stone-100 text-stone-600 font-bold border-b border-stone-200">
                 <tr>
@@ -332,7 +339,7 @@
             <span class="text-xs text-stone-500">共 <span id="repOrderListCount" class="font-bold text-stone-800">0</span> 筆訂單</span>
           </div>
 
-          <div class="border border-stone-200 rounded-xl overflow-hidden bg-white">
+          <div class="border border-stone-200 rounded-xl overflow-hidden overflow-x-auto bg-white">
             <table class="w-full text-left text-xs">
               <thead class="bg-stone-100 text-stone-600 font-bold border-b border-stone-200">
                 <tr>
@@ -625,7 +632,7 @@
         <div>
           <div class="flex items-center space-x-1.5">
             <p class="text-xs text-stone-500 font-medium">今日營業額</p>
-            <span class="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.2 rounded group-hover:bg-emerald-800 group-hover:text-white transition">報表 ➔</span>
+            <span class="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded group-hover:bg-emerald-800 group-hover:text-white transition">報表 ➔</span>
           </div>
           <p id="statTodayRevenue" class="text-2xl font-bold text-emerald-800">$0</p>
           <p class="text-[11px] text-stone-400 mt-0.5">全期累計: <span id="statAllTimeRevenue" class="font-bold text-stone-700">$0</span></p>
@@ -941,16 +948,22 @@
       let ecoBagCount = 0;
 
       orderList.forEach(o => {
-        if (o.bringEcoBag) ecoBagCount++;
+        if (o.bringEcoBag || o.needBag) ecoBagCount++;
         (o.items || []).forEach(item => {
-          totalCups += item.quantity || 1;
+          const qty = Number(item.quantity || item.qty) || 1;
+          totalCups += qty;
           const name = item.name || '優格碗';
-          itemCounts[name] = (itemCounts[name] || 0) + (item.quantity || 1);
+          itemCounts[name] = (itemCounts[name] || 0) + qty;
           
           if (item.addOns && item.addOns.length > 0) {
             item.addOns.forEach(add => {
-              const addKey = `【加料】${add.name}`;
-              itemCounts[addKey] = (itemCounts[addKey] || 0) + (item.quantity || 1);
+              const addKey = `【加料】${add.name || add}`;
+              itemCounts[addKey] = (itemCounts[addKey] || 0) + qty;
+            });
+          } else if (item.options && item.options.length > 0) {
+            item.options.forEach(opt => {
+              const addKey = `【加料】${opt.name || opt}`;
+              itemCounts[addKey] = (itemCounts[addKey] || 0) + qty;
             });
           }
         });
@@ -1057,7 +1070,7 @@
                 <div class="flex items-center space-x-2 ${isOverdue ? 'text-rose-900' : 'text-emerald-900'} font-bold">
                   <i class="fas fa-clock ${isOverdue ? 'text-rose-600' : 'text-emerald-700'} text-sm"></i>
                   <span>預約取餐：${o.pickupDate || '今日'} ${o.pickupTime || '盡速'}</span>
-                  ${isOverdue ? '<span class="bg-rose-600 text-white text-[10px] font-black px-1.5 py-0.2 rounded animate-pulse">⚠️ 已逾時</span>' : ''}
+                  ${isOverdue ? '<span class="bg-rose-600 text-white text-[10px] font-black px-1.5 py-0.5 rounded animate-pulse">⚠️ 已逾時</span>' : ''}
                 </div>
                 <span class="${isOverdue ? 'text-rose-600' : 'text-emerald-700'} text-[11px] font-normal">下單 ${orderTime}</span>
               </div>
@@ -1069,7 +1082,7 @@
                 <div class="flex items-center space-x-2 font-medium text-stone-800">
                   <i class="fas fa-user text-stone-400"></i>
                   <span class="font-bold text-stone-900">${escapeHtml(o.customerName || '顧客')}</span>
-                  ${o.bringEcoBag || o.needBag ? '<span class="bg-emerald-100 text-emerald-800 text-[10px] px-1.5 py-0.2 rounded font-medium"><i class="fas fa-leaf mr-0.5"></i>自備環保袋</span>' : ''}
+                  ${o.bringEcoBag || o.needBag ? '<span class="bg-emerald-100 text-emerald-800 text-[10px] px-1.5 py-0.5 rounded font-medium"><i class="fas fa-leaf mr-0.5"></i>自備環保袋</span>' : ''}
                 </div>
                 <a href="tel:${o.customerPhone || o.phone}" class="text-emerald-700 hover:text-emerald-900 font-bold flex items-center space-x-1 bg-emerald-50 px-2 py-0.5 rounded">
                   <i class="fas fa-phone-alt"></i>
@@ -1078,7 +1091,7 @@
               </div>
 
               <div class="flex items-center justify-between text-stone-500 pt-0.5">
-                <span>付款方式：<b class="text-stone-700">${o.paymentMethod === 'linepay' ? 'LINE Pay Money' : '現場現金支付'}</b></span>
+                <span>付款方式：<b class="text-stone-700">${(o.paymentMethod === 'LINE Pay Money' || o.paymentMethod === 'linepay') ? 'LINE Pay Money' : '現場現金支付'}</b></span>
                 ${o.couponApplied || o.discountCode ? '<span class="text-rose-600 font-semibold text-[11px]"><i class="fas fa-tag mr-0.5"></i>已用集點券</span>' : ''}
               </div>
 
@@ -1106,7 +1119,7 @@
                       </div>
                     ` : ''}
                   </div>
-                  <span class="text-stone-600 font-medium">$${item.subtotal || item.price * (item.quantity || item.qty || 1)}</span>
+                  <span class="text-stone-600 font-medium">$${item.subtotal || ((Number(item.price) || 0) * (Number(item.quantity || item.qty) || 1))}</span>
                 </div>
               `).join('')}
             </div>
@@ -1338,15 +1351,21 @@ ${itemLines}
 5.餐點品項：
 請寫 (數量在品名後面*) (特殊需求請寫在品項後面)
 ${itemsStr}
-付款方式：${order.paymentMethod === 'linepay' ? 'LINE Pay Money' : '現金付款'}
+付款方式：${(order.paymentMethod === 'LINE Pay Money' || order.paymentMethod === 'linepay') ? 'LINE Pay Money' : '現金付款'}
 自備環保袋：${order.bringEcoBag || order.needBag ? '是' : '否'}
 ${order.couponApplied || order.discountCode ? `集點優惠：${order.couponApplied || order.discountCode}\n` : ''}總金額：NT$ ${order.finalTotal || order.totalAmount || order.total || 0}
 ${order.notes || order.note ? `備註：${order.notes || order.note}\n` : ''}
 ‼️有回覆才算訂單完成✅`;
 
-      navigator.clipboard.writeText(text).then(() => {
-        alert(`已複製符合官方格式的訂單 #${orderId} 明細！可直接貼在 LINE 傳送。`);
-      });
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => {
+          alert(`已複製符合官方格式的訂單 #${orderId} 明細！可直接貼在 LINE 傳送。`);
+        }).catch(() => {
+          prompt(`請手動複製訂單 #${orderId} 明細：`, text);
+        });
+      } else {
+        prompt(`請手動複製訂單 #${orderId} 明細：`, text);
+      }
     }
 
     // Export orders as CSV
@@ -1661,7 +1680,7 @@ ${order.notes || order.note ? `備註：${order.notes || order.note}\n` : ''}
         if (disc > 0 || o.couponApplied || o.discountCode) discountCount++;
         if (o.bringEcoBag || o.needBag) ecoBagCount++;
 
-        if (o.paymentMethod === 'linepay') {
+        if (o.paymentMethod === 'LINE Pay Money' || o.paymentMethod === 'linepay') {
           linePayAmount += finalTot;
           linePayCount++;
         } else {
@@ -1793,7 +1812,7 @@ ${order.notes || order.note ? `備註：${order.notes || order.note}\n` : ''}
               <td class="py-2.5 px-3 text-stone-800 font-medium">${o.pickupDate || ''} ${o.pickupTime || ''}</td>
               <td class="py-2.5 px-3 font-bold text-stone-800">${escapeHtml(o.customerName || '')}</td>
               <td class="py-2.5 px-4 text-stone-600 truncate max-w-xs" title="${escapeHtml(itemsSummary)}">${escapeHtml(itemsSummary)}</td>
-              <td class="py-2.5 px-3 text-stone-600">${o.paymentMethod === 'linepay' ? 'LINE Pay' : '現金'}</td>
+              <td class="py-2.5 px-3 text-stone-600">${(o.paymentMethod === 'LINE Pay Money' || o.paymentMethod === 'linepay') ? 'LINE Pay' : '現金'}</td>
               <td class="py-2.5 px-3">${stHtml}</td>
               <td class="py-2.5 px-3 text-right font-black font-mono ${o.status === 'cancelled' ? 'line-through text-stone-400' : 'text-stone-900'}">$${(o.finalTotal || o.totalAmount || o.total || 0).toLocaleString()}</td>
             </tr>
@@ -1831,7 +1850,7 @@ ${order.notes || order.note ? `備註：${order.notes || order.note}\n` : ''}
           `"${(o.customerName || '').replace(/"/g, '""')}"`,
           `'${o.customerPhone || o.phone || ''}`,
           `"${items.replace(/"/g, '""')}"`,
-          o.paymentMethod === 'linepay' ? 'LINE Pay' : '現金付款',
+          (o.paymentMethod === 'LINE Pay Money' || o.paymentMethod === 'linepay') ? 'LINE Pay' : '現金付款',
           o.status || '',
           o.finalTotal || o.totalAmount || o.total || 0,
           o.bringEcoBag || o.needBag ? '是' : '否',
@@ -1940,7 +1959,7 @@ ${order.notes || order.note ? `備註：${order.notes || order.note}\n` : ''}
           <div class="bg-stone-50 border ${isAvail ? 'border-stone-200' : 'border-rose-200 bg-rose-50/20'} rounded-xl p-3.5 flex space-x-3.5 transition">
             <div class="w-20 h-20 rounded-lg overflow-hidden bg-stone-200 flex-shrink-0 relative">
               <img src="${item.image || 'images/hero.jpg'}" alt="${escapeHtml(item.name)}" class="w-full h-full object-cover">
-              ${item.tag ? `<span class="absolute top-1 left-1 bg-stone-900/80 text-white text-[9px] font-bold px-1 py-0.2 rounded">${escapeHtml(item.tag)}</span>` : ''}
+              ${item.tag ? `<span class="absolute top-1 left-1 bg-stone-900/80 text-white text-[9px] font-bold px-1 py-0.5 rounded">${escapeHtml(item.tag)}</span>` : ''}
               ${!isAvail ? `<span class="absolute inset-0 bg-stone-950/65 flex items-center justify-center text-white text-xs font-black">已下架</span>` : ''}
             </div>
             

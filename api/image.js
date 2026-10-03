@@ -3,16 +3,20 @@ import crypto from "crypto";
 const BUCKET_NAME = process.env.R2_BUCKET_NAME || "yougu-orders";
 
 function getR2Config() {
-  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
-  const accessKeyId = process.env.R2_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
-  const endpoint = process.env.R2_ENDPOINT || (accountId ? `https://${accountId}.r2.cloudflarestorage.com` : null);
+  const accountId = (process.env.CLOUDFLARE_ACCOUNT_ID || "").trim().replace(/^["']|["']$/g, "");
+  const accessKeyId = (process.env.R2_ACCESS_KEY_ID || "").trim().replace(/^["']|["']$/g, "");
+  const secretAccessKey = (process.env.R2_SECRET_ACCESS_KEY || "").trim().replace(/^["']|["']$/g, "");
+  let endpoint = (process.env.R2_ENDPOINT || "").trim().replace(/^["']|["']$/g, "");
+  if (!endpoint && accountId) {
+    endpoint = `https://${accountId}.r2.cloudflarestorage.com`;
+  }
   if (!accessKeyId || !secretAccessKey || !endpoint) return null;
+  endpoint = endpoint.replace(/\/+$/, "");
   return { accessKeyId, secretAccessKey, endpoint };
 }
 
 function hmacSHA256(key, data) { return crypto.createHmac("sha256", key).update(data, "utf8").digest(); }
-function sha256Hex(data) { return crypto.createHash("sha256").update(data).digest("hex"); }
+function sha256Hex(data) { return crypto.createHash("sha256").update(data, "utf8").digest("hex"); }
 function getSigningKey(secretKey, dateStamp) {
   return hmacSHA256(hmacSHA256(hmacSHA256(hmacSHA256("AWS4" + secretKey, dateStamp), "auto"), "s3"), "aws4_request");
 }
@@ -39,8 +43,17 @@ async function r2GetBinary(r2Config, key) {
 }
 
 export default async function handler(req, res) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  if (req.method === "OPTIONS") return res.status(200).end();
+
   const { key } = req.query || {};
   if (!key) return res.status(400).send("Missing image key");
+
+  if (key.includes('..') || (!key.startsWith('menu-images/') && !key.startsWith('images/'))) {
+    return res.status(403).send("Access denied");
+  }
 
   const r2Config = getR2Config();
   if (!r2Config) return res.status(404).send("Storage not configured");

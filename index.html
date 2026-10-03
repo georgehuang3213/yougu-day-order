@@ -44,6 +44,13 @@
       -ms-overflow-style: none;
       scrollbar-width: none;
     }
+    @keyframes slideUp {
+      from { transform: translateY(100%); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    .animate-slide-up {
+      animation: slideUp 0.3s ease-out;
+    }
   </style>
 </head>
 <body class="text-brand-dark pb-28">
@@ -369,6 +376,13 @@
     let cart = {}; // { id: qty }
     let currentCategory = 'bowls';
 
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str).replace(/[&<>"']/g, function(m) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m];
+      });
+    }
+
     // 取得最新雲端菜單
     async function fetchMenu() {
       try {
@@ -399,8 +413,8 @@
 
     // 初始化渲染
     window.addEventListener('DOMContentLoaded', () => {
-      fetchMenu();
       renderMenu();
+      fetchMenu();
       initDefaultDates();
       loadCartFromStorage();
     });
@@ -469,10 +483,10 @@
         return `
           <div class="bg-white rounded-2xl p-3.5 shadow-sm border ${isAvailable ? 'border-orange-100' : 'border-stone-200 bg-stone-50/70 opacity-80'} flex space-x-3.5 transition">
             <div class="w-24 h-24 rounded-xl overflow-hidden bg-orange-100 flex-shrink-0 relative">
-              <img src="${item.image || 'images/hero.jpg'}" alt="${item.name}" class="w-full h-full object-cover ${!isAvailable ? 'grayscale-[60%]' : ''}">
+              <img src="${item.image || 'images/hero.jpg'}" alt="${escapeHtml(item.name)}" class="w-full h-full object-cover ${!isAvailable ? 'grayscale-[60%]' : ''}">
               ${item.tag ? `
                 <span class="absolute top-1 left-1 bg-orange-600/90 text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow">
-                  ${item.tag}
+                  ${escapeHtml(item.tag)}
                 </span>
               ` : ''}
               ${!isAvailable ? `
@@ -483,8 +497,8 @@
             </div>
             <div class="flex-1 flex flex-col justify-between">
               <div>
-                <h4 class="font-bold text-sm text-brand-dark leading-snug">${item.name}</h4>
-                <p class="text-xs text-stone-500 mt-1 line-clamp-2 leading-relaxed">${item.desc || ''}</p>
+                <h4 class="font-bold text-sm text-brand-dark leading-snug">${escapeHtml(item.name)}</h4>
+                <p class="text-xs text-stone-500 mt-1 line-clamp-2 leading-relaxed">${escapeHtml(item.desc || '')}</p>
               </div>
               <div class="flex items-center justify-between mt-2 pt-1 border-t border-orange-50">
                 <span class="font-black text-base text-orange-600">NT$ ${item.price}</span>
@@ -575,7 +589,7 @@
         return `
           <div class="flex items-center justify-between border-b border-orange-50 pb-2">
             <div>
-              <div class="font-bold text-sm text-brand-dark">${item.name}</div>
+              <div class="font-bold text-sm text-brand-dark">${escapeHtml(item.name)}</div>
               <div class="text-xs text-orange-600 font-bold">NT$ ${item.price} × ${qty} = NT$ ${item.price * qty}</div>
             </div>
             <div class="flex items-center space-x-2">
@@ -602,7 +616,7 @@
       for (const [id, qty] of Object.entries(cart)) {
         const item = MENU_DATA.find(m => m.id === id);
         if (item) {
-          summaryHtml += `<div class="flex justify-between py-0.5 border-b border-orange-100 last:border-none font-bold text-stone-800"><span>${idx}. ${item.name}*${qty}</span><span class="text-orange-600 font-normal">NT$ ${item.price * qty}</span></div>`;
+          summaryHtml += `<div class="flex justify-between py-0.5 border-b border-orange-100 last:border-none font-bold text-stone-800"><span>${idx}. ${escapeHtml(item.name)}*${qty}</span><span class="text-orange-600 font-normal">NT$ ${item.price * qty}</span></div>`;
           idx++;
         }
       }
@@ -620,7 +634,7 @@
         const item = MENU_DATA.find(m => m.id === id);
         if (item) {
           subtotal += item.price * qty;
-          if (item.category === 'bowls' || item.price >= 110) {
+          if (item.category === 'bowls') {
             if (item.price > maxBowlPrice) maxBowlPrice = item.price;
           }
         }
@@ -632,8 +646,8 @@
       if (discountType === '20') {
         discountAmount = Math.min(20, subtotal);
       } else if (discountType === 'item') {
-        // 折抵單份最貴品項 (最高140元)
-        const freeItemDiscount = maxBowlPrice > 0 ? Math.min(maxBowlPrice, 140) : 130;
+        // 折抵單份最貴品項 (最高140元，需有購買優格碗)
+        const freeItemDiscount = maxBowlPrice > 0 ? Math.min(maxBowlPrice, 140) : 0;
         discountAmount = Math.min(freeItemDiscount, subtotal);
       }
 
@@ -729,18 +743,27 @@
       };
 
       // 1. 同步提交至後端 Vercel Serverless API
+      let apiSuccess = false;
+      let confirmedId = null;
       try {
-        await fetch('/api/orders', {
+        const apiRes = await fetch('/api/orders', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(orderPayload)
         });
+        apiSuccess = apiRes.ok;
+        if (apiRes.ok) {
+          const resData = await apiRes.json();
+          if (resData && resData.order) {
+            confirmedId = resData.order.orderId || resData.order.id;
+          }
+        }
       } catch (err) {
         console.warn("API 存取失敗，使用本機儲存與 LINE 直接通訊：", err);
       }
 
       // 2. 本地儲存備份訂單
-      const generatedId = `YG-${Date.now().toString().slice(-4)}`;
+      const generatedId = confirmedId || `YG-${Date.now().toString().slice(-4)}`;
       const localOrders = JSON.parse(localStorage.getItem('yougu_orders') || '[]');
       localOrders.unshift({
         ...orderPayload,
@@ -791,7 +814,11 @@ ${note ? `備註：${note}\n` : ''}
       // LINE 官方帳號深層連結：已綁定優穀日官方帳號 @500wjekc
       const lineUrl = `https://line.me/R/oaMessage/@500wjekc/?${encodedMsg}`;
       
-      alert("訂單已成立！即將為您跳轉至官方 LINE 發送確認訂單 ➔");
+      if (apiSuccess) {
+        alert(`訂單 #${generatedId} 已成立並同步至店家！\n即將為您跳轉至官方 LINE 發送確認訂單 ➔`);
+      } else {
+        alert("訂單已整理完畢！即將為您跳轉至官方 LINE 發送確認訂單 ➔\n\n⚠️ 提醒：目前連線較慢，請務必在 LINE 聊天室送出訊息，以確保店家收到您的訂單！");
+      }
       window.location.href = lineUrl;
     }
   </script>

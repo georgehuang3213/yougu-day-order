@@ -276,9 +276,8 @@ function normalizeOrder(data, customId = null) {
     customerPhone: data.customerPhone || data.phone || "",
     pickupDate: data.pickupDate || "",
     pickupTime: data.pickupTime || "",
-    paymentMethod: data.paymentMethod || "cash",
-    needBag: !!(data.needBag || data.bringEcoBag),
-    bringEcoBag: !!(data.bringEcoBag || data.needBag),
+    bringEcoBag: data.bringEcoBag !== undefined ? !!data.bringEcoBag : !!data.needBag,
+    needBag: data.needBag !== undefined ? !!data.needBag : !!data.bringEcoBag,
     discountCode: data.discountCode || data.couponApplied || "",
     couponApplied: data.couponApplied || data.discountCode || "",
     discountAmount: discountAmount,
@@ -298,9 +297,9 @@ function normalizeOrder(data, customId = null) {
 // ─────────────────────────────────────────────────────────
 // 發送 Telegram 通知給店家（顧客下單自動即時推播）
 // ─────────────────────────────────────────────────────────
-async function sendLineNotificationToStore(order) {
-  const tgToken  = (process.env.TELEGRAM_BOT_TOKEN || "8711630273:AAGf9_Okw8pRsUwP4I_3wpWzKSO14vL3Cmc").trim();
-  const tgChatId = (process.env.TELEGRAM_CHAT_ID || "-5155842492").trim();
+async function sendTelegramNotification(order) {
+  const tgToken  = (process.env.TELEGRAM_BOT_TOKEN || "").trim();
+  const tgChatId = (process.env.TELEGRAM_CHAT_ID || "").trim();
   if (!tgToken || !tgChatId) {
     console.warn("Telegram Token 或 Chat ID 未設定，略過推播");
     return;
@@ -355,7 +354,6 @@ https://yougu-day-order.vercel.app/admin`;
 // 主要 API Handler
 // ─────────────────────────────────────────────────────────
 export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Credentials", true);
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS,PATCH,DELETE,POST,PUT");
   res.setHeader("Access-Control-Allow-Headers",
@@ -421,7 +419,7 @@ export default async function handler(req, res) {
       await saveOrders(r2Config, mergedOrders);
 
       // 3. 發送 Telegram 通知給店家（await 確保 Vercel 容器釋放前完成發送）
-      await sendLineNotificationToStore(newOrder);
+      await sendTelegramNotification(newOrder);
 
       return res.status(201).json({
         success: true,
@@ -435,7 +433,7 @@ export default async function handler(req, res) {
       try {
         const fallbackOrder = normalizeOrder(req.body, `YG-${Date.now().toString().slice(-4)}`);
         memoryOrders.unshift(fallbackOrder);
-        await sendLineNotificationToStore(fallbackOrder);
+        await sendTelegramNotification(fallbackOrder);
         return res.status(201).json({
           success: true,
           message: "訂單已建立（保底機制生效）",
@@ -454,6 +452,14 @@ export default async function handler(req, res) {
       const { id, orderId, status } = req.body || {};
       const targetId = orderId || id;
       if (!targetId) return res.status(400).json({ success: false, message: "缺少訂單編號" });
+
+      const VALID_STATUSES = ['new', 'preparing', 'ready', 'completed', 'cancelled'];
+      if (status && !VALID_STATUSES.includes(status)) {
+        return res.status(400).json({ success: false, message: `無效的狀態值：${status}` });
+      }
+      if (!status) {
+        return res.status(400).json({ success: false, message: '缺少訂單狀態' });
+      }
 
       const orders = await loadOrders(r2Config);
       const orderIndex = orders.findIndex(o => o.orderId === targetId || o.id === targetId);

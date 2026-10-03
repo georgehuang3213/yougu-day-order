@@ -3,16 +3,20 @@ import crypto from "crypto";
 const BUCKET_NAME = process.env.R2_BUCKET_NAME || "yougu-orders";
 
 function getR2Config() {
-  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
-  const accessKeyId = process.env.R2_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
-  const endpoint = process.env.R2_ENDPOINT || (accountId ? `https://${accountId}.r2.cloudflarestorage.com` : null);
+  const accountId = (process.env.CLOUDFLARE_ACCOUNT_ID || "").trim().replace(/^["']|["']$/g, "");
+  const accessKeyId = (process.env.R2_ACCESS_KEY_ID || "").trim().replace(/^["']|["']$/g, "");
+  const secretAccessKey = (process.env.R2_SECRET_ACCESS_KEY || "").trim().replace(/^["']|["']$/g, "");
+  let endpoint = (process.env.R2_ENDPOINT || "").trim().replace(/^["']|["']$/g, "");
+  if (!endpoint && accountId) {
+    endpoint = `https://${accountId}.r2.cloudflarestorage.com`;
+  }
   if (!accessKeyId || !secretAccessKey || !endpoint) return null;
+  endpoint = endpoint.replace(/\/+$/, "");
   return { accessKeyId, secretAccessKey, endpoint };
 }
 
 function hmacSHA256(key, data) { return crypto.createHmac("sha256", key).update(data, "utf8").digest(); }
-function sha256Hex(data) { return crypto.createHash("sha256").update(data).digest("hex"); }
+function sha256Hex(data) { return crypto.createHash("sha256").update(data, "utf8").digest("hex"); }
 function getSigningKey(secretKey, dateStamp) {
   return hmacSHA256(hmacSHA256(hmacSHA256(hmacSHA256("AWS4" + secretKey, dateStamp), "auto"), "s3"), "aws4_request");
 }
@@ -64,6 +68,11 @@ export default async function handler(req, res) {
     let base64Data = image;
     const match = image.match(/^data:([^;]+);base64,(.+)$/);
     if (match) { mimeType = match[1]; base64Data = match[2]; }
+
+    const allowedMimes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+    if (!allowedMimes.includes(mimeType.toLowerCase())) {
+      return res.status(400).json({ success: false, message: '僅支援上傳圖片檔案 (JPG/PNG/GIF/WebP)' });
+    }
 
     const buffer  = Buffer.from(base64Data, "base64");
     const ext     = (mimeType.split("/")[1] || "jpg").replace("jpeg", "jpg");

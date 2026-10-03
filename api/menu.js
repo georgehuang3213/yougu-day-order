@@ -14,11 +14,15 @@ let memoryMenu = [...DEFAULT_MENU];
 
 // ─── R2 fetch 工具（AWS Sig V4，無 SDK）─────────────────
 function getR2Config() {
-  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
-  const accessKeyId = process.env.R2_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
-  const endpoint = process.env.R2_ENDPOINT || (accountId ? `https://${accountId}.r2.cloudflarestorage.com` : null);
+  const accountId = (process.env.CLOUDFLARE_ACCOUNT_ID || "").trim().replace(/^["']|["']$/g, "");
+  const accessKeyId = (process.env.R2_ACCESS_KEY_ID || "").trim().replace(/^["']|["']$/g, "");
+  const secretAccessKey = (process.env.R2_SECRET_ACCESS_KEY || "").trim().replace(/^["']|["']$/g, "");
+  let endpoint = (process.env.R2_ENDPOINT || "").trim().replace(/^["']|["']$/g, "");
+  if (!endpoint && accountId) {
+    endpoint = `https://${accountId}.r2.cloudflarestorage.com`;
+  }
   if (!accessKeyId || !secretAccessKey || !endpoint) return null;
+  endpoint = endpoint.replace(/\/+$/, "");
   return { accessKeyId, secretAccessKey, endpoint };
 }
 
@@ -81,7 +85,6 @@ async function saveMenu(r2Config, menu) {
 }
 
 export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Credentials", true);
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS,POST,PUT,DELETE");
   res.setHeader("Access-Control-Allow-Headers",
