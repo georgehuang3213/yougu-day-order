@@ -45,7 +45,7 @@ function getR2Config() {
   return { accessKeyId, secretAccessKey, endpoint };
 }
 
-const BUCKET_NAME = (process.env.R2_BUCKET_NAME || "yougu-orders").trim();
+const BUCKET_NAME = (process.env.R2_BUCKET_NAME || "yougu-orders").trim().replace(/^["']|["']$/g, "");
 
 // ─────────────────────────────────────────────────────────
 // AWS Signature V4 實作
@@ -147,6 +147,8 @@ async function listR2Keys(r2Config, prefix) {
 // ─────────────────────────────────────────────────────────
 // 訂單 CRUD（高可用性＋高並發防覆蓋保證：永不中斷、永不遺漏點餐）
 // ─────────────────────────────────────────────────────────
+let lastR2Debug = {};
+
 async function loadOrders(r2Config) {
   if (!r2Config) return memoryOrders;
   try {
@@ -155,6 +157,16 @@ async function loadOrders(r2Config) {
     // 1. 先讀取總表 orders.json
     try {
       const res = await r2Fetch(r2Config, "GET", "orders.json");
+      const resText = res.ok ? null : await res.text();
+      lastR2Debug = {
+        fetchOk: res.ok,
+        fetchStatus: res.status,
+        fetchText: resText,
+        endpoint: r2Config.endpoint,
+        bucket: BUCKET_NAME,
+        hasKey: !!r2Config.accessKeyId,
+        keyPrefix: r2Config.accessKeyId ? r2Config.accessKeyId.slice(0, 4) : ""
+      };
       if (res.ok) {
         const parsed = await res.json();
         if (Array.isArray(parsed)) {
@@ -162,6 +174,7 @@ async function loadOrders(r2Config) {
         }
       }
     } catch (e) {
+      lastR2Debug = { fetchError: e.message };
       console.warn("loadOrders 讀取 orders.json 警告:", e.message);
     }
 
@@ -372,7 +385,8 @@ export default async function handler(req, res) {
         success: true,
         count: orders.length,
         orders,
-        storage: isR2Active ? "cloudflare-r2" : "memory-fallback"
+        storage: isR2Active ? "cloudflare-r2" : "memory-fallback",
+        r2Debug: lastR2Debug
       });
     } catch (err) {
       console.error("GET 訂單失敗:", err);
