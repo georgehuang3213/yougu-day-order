@@ -416,6 +416,29 @@ export default async function handler(req, res) {
       const randSuffix = Math.random().toString(36).substring(2, 5).toUpperCase();
       const generatedId = `YG-${todayStr}-${timeMs}${randSuffix}`;
 
+      // 以雲端菜單核對品項與價格（防止前端竄改價格）；菜單讀取失敗時不阻擋點餐
+      if (r2Config) {
+        try {
+          const mr = await r2Fetch(r2Config, "GET", "menu.json");
+          if (mr.ok) {
+            const menu = await mr.json();
+            if (Array.isArray(menu) && menu.length > 0) {
+              const byId = new Map(menu.map(m => [m.id, m]));
+              for (const it of data.items) {
+                const m = byId.get(it.id);
+                if (!m) {
+                  return res.status(400).json({ success: false, message: `餐點「${it.name || it.id}」已下架或不存在，請重新整理頁面` });
+                }
+                it.price = Number(m.price) || 0;
+                it.name = m.name || it.name;
+              }
+            }
+          }
+        } catch (e) {
+          console.warn("菜單價格核對略過:", e.message);
+        }
+      }
+
       const newOrder = normalizeOrder(data, generatedId);
 
       // 1. 同步寫入個別雲端備份（每個訂單獨立檔案，完全原子操作，高並發 100% 零覆蓋零碰撞）
