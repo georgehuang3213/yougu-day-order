@@ -16,17 +16,11 @@ let memoryMenu = [...DEFAULT_MENU];
 // ─── R2 fetch 工具（AWS Sig V4，無 SDK）─────────────────
 function getR2Config() {
   const CORRECT_ACCOUNT_ID = "8487a37db0822819e2e9a080ed2d437b";
-  let accountId = (process.env.CLOUDFLARE_ACCOUNT_ID || CORRECT_ACCOUNT_ID).trim().replace(/^["']|["']$/g, "");
-  if (accountId.startsWith("8487a37db0822819")) {
-    accountId = CORRECT_ACCOUNT_ID;
-  }
+  const accountId = (process.env.CLOUDFLARE_ACCOUNT_ID || CORRECT_ACCOUNT_ID).trim().replace(/^["']|["']$/g, "");
   const accessKeyId = (process.env.R2_ACCESS_KEY_ID || "").trim().replace(/^["']|["']$/g, "");
   const secretAccessKey = (process.env.R2_SECRET_ACCESS_KEY || "").trim().replace(/^["']|["']$/g, "");
   let endpoint = (process.env.R2_ENDPOINT || "").trim().replace(/^["']|["']$/g, "");
 
-  if (endpoint.includes("8487a37db0822819")) {
-    endpoint = endpoint.replace(/8487a37db0822819[a-f0-9]{16}/i, CORRECT_ACCOUNT_ID);
-  }
 
   if (!endpoint && accountId) {
     endpoint = `https://${accountId}.r2.cloudflarestorage.com`;
