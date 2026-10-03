@@ -86,8 +86,9 @@ async function r2Fetch(r2Config, method, key, body) {
     : "host;x-amz-content-sha256;x-amz-date";
 
   const canonRequest = [method, `/${BUCKET_NAME}/${key}`, "", canonHeaders, signedHeaders, bodyHash].join("\n");
+  const canonRequestHash = sha256Hex(canonRequest);
   const credScope    = `${dateStamp}/auto/s3/aws4_request`;
-  const stringToSign = ["AWS4-HMAC-SHA256", amzDate, credScope, sha256Hex(canonRequest)].join("\n");
+  const stringToSign = ["AWS4-HMAC-SHA256", amzDate, credScope, canonRequestHash].join("\n");
 
   const signingKey = getSigningKey(secretAccessKey, dateStamp);
   const signature  = hmacSHA256(signingKey, stringToSign).toString("hex");
@@ -105,7 +106,7 @@ async function r2Fetch(r2Config, method, key, body) {
     canonHeaders,
     signedHeaders,
     canonRequest,
-    canonHex: Buffer.from(canonRequest).toString('hex'),
+    canonRequestHash,
     stringToSign,
     authHeader
   };
