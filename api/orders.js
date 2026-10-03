@@ -166,9 +166,8 @@ async function loadOrders(r2Config) {
         bucket: BUCKET_NAME,
         hasKey: !!r2Config.accessKeyId,
         keyPrefix: r2Config.accessKeyId ? r2Config.accessKeyId.slice(0, 4) : "",
-        secretLength: r2Config.secretAccessKey ? r2Config.secretAccessKey.length : 0,
-        secretPrefix: r2Config.secretAccessKey ? r2Config.secretAccessKey.slice(0, 4) : "",
-        secretSuffix: r2Config.secretAccessKey ? r2Config.secretAccessKey.slice(-4) : ""
+        keyHash: sha256Hex(r2Config.accessKeyId || ""),
+        secretHash: sha256Hex(r2Config.secretAccessKey || "")
       };
       if (res.ok) {
         const parsed = await res.json();
