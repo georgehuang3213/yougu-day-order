@@ -263,10 +263,6 @@ async function deleteSingleOrder(r2Config, orderId) {
 // ─────────────────────────────────────────────────────────
 function normalizeOrder(data, customId = null) {
   const orderId = customId || data.orderId || data.id || `YG-${Date.now().toString().slice(-4)}`;
-  const subtotal = Number(data.subtotal) || 0;
-  const discountAmount = Number(data.discountAmount) || 0;
-  const total = Number(data.total || data.finalTotal || data.totalAmount) || Math.max(0, subtotal - discountAmount);
-
   const formattedItems = (data.items || []).map(item => ({
     id: item.id || "",
     name: item.name || "優格碗",
@@ -277,6 +273,12 @@ function normalizeOrder(data, customId = null) {
     addOns: item.addOns || (item.options ? item.options.map(opt => ({ name: opt })) : [])
   }));
 
+  // 伺服器端依品項重新計算金額，避免前端漏傳或竄改
+  const itemsSubtotal = formattedItems.reduce((s, it) => s + it.price * it.qty, 0);
+  const subtotal = itemsSubtotal || Number(data.subtotal) || 0;
+  const discountAmount = Math.min(Math.max(Number(data.discountAmount) || 0, 0), subtotal);
+  const total = Math.max(0, subtotal - discountAmount);
+
   return {
     id: orderId,
     orderId: orderId,
@@ -285,6 +287,7 @@ function normalizeOrder(data, customId = null) {
     customerPhone: data.customerPhone || data.phone || "",
     pickupDate: data.pickupDate || "",
     pickupTime: data.pickupTime || "",
+    paymentMethod: data.paymentMethod || "",
     bringEcoBag: data.bringEcoBag !== undefined ? !!data.bringEcoBag : !!data.needBag,
     needBag: data.needBag !== undefined ? !!data.needBag : !!data.bringEcoBag,
     discountCode: data.discountCode || data.couponApplied || "",
