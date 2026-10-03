@@ -63,6 +63,8 @@ function getSigningKey(secretKey, dateStamp) {
   return hmacSHA256(kService, "aws4_request");
 }
 
+let lastR2Trace = {};
+
 async function r2Fetch(r2Config, method, key, body) {
   const { endpoint, accessKeyId, secretAccessKey } = r2Config;
   const host = new URL(endpoint).host;
@@ -97,6 +99,15 @@ async function r2Fetch(r2Config, method, key, body) {
     "x-amz-content-sha256": bodyHash,
   };
   if (contentType) headers["content-type"] = contentType;
+
+  lastR2Trace = {
+    url,
+    canonHeaders,
+    signedHeaders,
+    canonRequest,
+    stringToSign,
+    authHeader
+  };
 
   return fetch(url, {
     method,
@@ -162,12 +173,7 @@ async function loadOrders(r2Config) {
         fetchOk: res.ok,
         fetchStatus: res.status,
         fetchText: resText,
-        endpoint: r2Config.endpoint,
-        bucket: BUCKET_NAME,
-        hasKey: !!r2Config.accessKeyId,
-        keyPrefix: r2Config.accessKeyId ? r2Config.accessKeyId.slice(0, 4) : "",
-        keyHash: sha256Hex(r2Config.accessKeyId || ""),
-        secretHash: sha256Hex(r2Config.secretAccessKey || "")
+        trace: lastR2Trace
       };
       if (res.ok) {
         const parsed = await res.json();
