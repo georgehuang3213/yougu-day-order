@@ -1191,6 +1191,15 @@
       });
     }
 
+    function safeImageUrl(url) {
+      if (!url) return 'images/hero.jpg';
+      const clean = String(url).trim();
+      if (/^(https?:\/\/|\/api\/image\?|images\/|data:image\/)/i.test(clean)) {
+        return clean.replace(/"/g, '&quot;');
+      }
+      return 'images/hero.jpg';
+    }
+
     // 根據狀態產生對應 LINE 回覆訊息
     function buildLineMessage(order, newStatus) {
       const name = order.customerName || '顧客';
@@ -1928,7 +1937,7 @@ ${order.notes || order.note ? `備註：${order.notes || order.note}\n` : ''}
         return `
           <div class="bg-stone-50 border ${isAvail ? 'border-stone-200' : 'border-rose-200 bg-rose-50/20'} rounded-xl p-3.5 flex space-x-3.5 transition">
             <div class="w-20 h-20 rounded-lg overflow-hidden bg-stone-200 flex-shrink-0 relative">
-              <img src="${item.image || 'images/hero.jpg'}" alt="${escapeHtml(item.name)}" class="w-full h-full object-cover">
+              <img src="${safeImageUrl(item.image)}" alt="${escapeHtml(item.name)}" class="w-full h-full object-cover">
               ${item.tag ? `<span class="absolute top-1 left-1 bg-stone-900/80 text-white text-[9px] font-bold px-1 py-0.5 rounded">${escapeHtml(item.tag)}</span>` : ''}
               ${!isAvail ? `<span class="absolute inset-0 bg-stone-950/65 flex items-center justify-center text-white text-xs font-black">已下架</span>` : ''}
             </div>

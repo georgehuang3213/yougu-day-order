@@ -16,6 +16,25 @@ function taiwanMMDD(date = new Date()) {
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
+// 下單防刷限制器：同 IP 每 60 秒最多 5 筆訂單
+const orderRateLimits = new Map();
+function checkOrderRateLimit(req) {
+  const forwarded = req.headers["x-forwarded-for"];
+  const ip = forwarded ? forwarded.split(",")[0].trim() : (req.headers["x-real-ip"] || req.socket?.remoteAddress || "unknown");
+  const now = Date.now();
+  const windowMs = 60 * 1000;
+  const maxRequests = 5;
+
+  let timestamps = orderRateLimits.get(ip) || [];
+  timestamps = timestamps.filter(t => now - t < windowMs);
+  if (timestamps.length >= maxRequests) {
+    return false;
+  }
+  timestamps.push(now);
+  orderRateLimits.set(ip, timestamps);
+  return true;
+}
+
 // ─────────────────────────────────────────────────────────
 // R2 設定
 // ─────────────────────────────────────────────────────────
@@ -374,6 +393,13 @@ export default async function handler(req, res) {
 
   // ── POST: 顧客提交新訂單 ────────────────────────────────
   if (req.method === "POST") {
+    if (!checkOrderRateLimit(req)) {
+      return res.status(429).json({
+        success: false,
+        message: "點單頻率過高，請稍候 1 分鐘後再試，或直接使用 LINE 官方帳號下單！"
+      });
+    }
+
     const data = req.body;
     if (!data || !data.customerName || !Array.isArray(data.items) || data.items.length === 0) {
       return res.status(400).json({ success: false, message: "請提供完整的顧客資訊與訂單項目" });

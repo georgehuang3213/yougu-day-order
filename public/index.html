@@ -383,6 +383,15 @@
       });
     }
 
+    function safeImageUrl(url) {
+      if (!url) return 'images/hero.jpg';
+      const clean = String(url).trim();
+      if (/^(https?:\/\/|\/api\/image\?|images\/|data:image\/)/i.test(clean)) {
+        return clean.replace(/"/g, '&quot;');
+      }
+      return 'images/hero.jpg';
+    }
+
     // 取得最新雲端菜單
     async function fetchMenu() {
       try {
@@ -483,7 +492,7 @@
         return `
           <div class="bg-white rounded-2xl p-3.5 shadow-sm border ${isAvailable ? 'border-orange-100' : 'border-stone-200 bg-stone-50/70 opacity-80'} flex space-x-3.5 transition">
             <div class="w-24 h-24 rounded-xl overflow-hidden bg-orange-100 flex-shrink-0 relative">
-              <img src="${item.image || 'images/hero.jpg'}" alt="${escapeHtml(item.name)}" class="w-full h-full object-cover ${!isAvailable ? 'grayscale-[60%]' : ''}">
+              <img src="${safeImageUrl(item.image)}" alt="${escapeHtml(item.name)}" class="w-full h-full object-cover ${!isAvailable ? 'grayscale-[60%]' : ''}">
               ${item.tag ? `
                 <span class="absolute top-1 left-1 bg-orange-600/90 text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow">
                   ${escapeHtml(item.tag)}

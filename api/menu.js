@@ -113,10 +113,35 @@ export default async function handler(req, res) {
   if (req.method === "PUT" || req.method === "POST") {
     try {
       const body = req.body;
-      const newMenu = Array.isArray(body) ? body : (body && body.menu);
-      if (!Array.isArray(newMenu)) return res.status(400).json({ success: false, message: "無效的菜單格式，請提供陣列" });
-      await saveMenu(r2Config, newMenu);
-      return res.status(200).json({ success: true, message: "菜單已成功更新並同步至雲端！", menu: newMenu, storage: isR2Active ? "cloudflare-r2" : "memory-fallback" });
+      const rawMenu = Array.isArray(body) ? body : (body && body.menu);
+      if (!Array.isArray(rawMenu)) return res.status(400).json({ success: false, message: "無效的菜單格式，請提供陣列" });
+
+      // 驗證並過濾每一個菜單品項，防禦 XSS 與惡意注入
+      const safeMenu = [];
+      for (const item of rawMenu) {
+        if (!item || typeof item !== "object") continue;
+        const id = String(item.id || "").trim();
+        const name = String(item.name || "").trim().slice(0, 50);
+        const price = Math.max(0, Math.floor(Number(item.price) || 0));
+        const category = item.category === "addons" ? "addons" : "bowls";
+        const desc = String(item.desc || "").trim().slice(0, 200);
+        const tag = String(item.tag || "").trim().slice(0, 20);
+        const available = item.available !== false;
+
+        // 圖片 URL 協定白名單過濾 (防止 javascript: 等惡意 URI)
+        let image = String(item.image || "").trim();
+        const isSafeUrl = /^(https?:\/\/|\/api\/image\?|images\/|data:image\/)/i.test(image);
+        if (!isSafeUrl) {
+          image = "images/hero.jpg";
+        }
+
+        if (id && name) {
+          safeMenu.push({ id, name, category, price, desc, image, tag, available });
+        }
+      }
+
+      await saveMenu(r2Config, safeMenu);
+      return res.status(200).json({ success: true, message: "菜單已成功更新並同步至雲端！", menu: safeMenu, storage: isR2Active ? "cloudflare-r2" : "memory-fallback" });
     } catch (err) {
       return res.status(500).json({ success: false, message: "更新菜單失敗", error: err.message });
     }
