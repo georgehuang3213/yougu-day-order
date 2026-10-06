@@ -1,33 +1,20 @@
 import crypto from "crypto";
 import { requireAdmin } from "./_auth.js";
 
-// 記憶體備用資料（當雲端暫時離線或重啟時的高可用備援）
-let memoryOrders = [
-  {
-    id: "YG-1001",
-    orderId: "YG-1001",
-    customerName: "陳小姐",
-    phone: "0912345678",
-    customerPhone: "0912345678",
-    pickupDate: new Date().toISOString().slice(0, 10),
-    pickupTime: "08:30",
-    paymentMethod: "linepay",
-    needBag: false,
-    bringEcoBag: false,
-    discountCode: "折價20元",
-    couponApplied: "折價20元",
-    discountAmount: 20,
-    items: [{ id: "yogurt-mango", name: "芒果優格碗", price: 165, qty: 1, quantity: 1, options: [] }],
-    subtotal: 165,
-    total: 145,
-    finalTotal: 145,
-    totalAmount: 145,
-    note: "請附木湯匙，謝謝！",
-    notes: "請附木湯匙，謝謝！",
-    status: "new",
-    createdAt: new Date().toISOString()
-  }
-];
+// 記憶體資料：僅在「未設定 R2」時作為儲存，或 R2 讀取失敗時作為唯讀快取。
+// 注意：絕不可再合併回 R2，否則已刪除的訂單會在其他 Vercel 實例「復活」。
+let memoryOrders = [];
+
+// 折扣規則（必須與前端 index.html 的 discount-select 一致）
+const MAX_ITEM_DISCOUNT = 140;
+const MAX_QTY_PER_ITEM = 50;
+
+// 台灣時區日期字串（MMDD），避免早上 8 點前訂單編號變成前一天
+function taiwanMMDD(date = new Date()) {
+  return new Date(date.getTime() + 8 * 60 * 60 * 1000).toISOString().slice(5, 10).replace("-", "");
+}
+
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 // ─────────────────────────────────────────────────────────
 // R2 設定
@@ -66,7 +53,7 @@ function getSigningKey(secretKey, dateStamp) {
   return hmacSHA256(kService, "aws4_request");
 }
 
-async function r2Fetch(r2Config, method, key, body) {
+async function r2Fetch(r2Config, method, key, body, extraHeaders = {}) {
   const { endpoint, accessKeyId, secretAccessKey } = r2Config;
   const host = new URL(endpoint).host;
   const url  = `${endpoint}/${BUCKET_NAME}/${key}`;
@@ -101,6 +88,7 @@ async function r2Fetch(r2Config, method, key, body) {
     "x-amz-content-sha256": bodyHash,
   };
   if (contentType) headers["content-type"] = contentType;
+  Object.assign(headers, extraHeaders);
 
   return fetch(url, {
     method,
@@ -149,99 +137,87 @@ async function listR2Keys(r2Config, prefix) {
 }
 
 // ─────────────────────────────────────────────────────────
-// 訂單 CRUD（高可用性＋高並發防覆蓋保證：永不中斷、永不遺漏點餐）
+// 訂單 CRUD
+// - orders.json 為總表；orders/{id}.json 為每筆訂單的獨立備份（下單時先寫，避免並發遺失）
+// - 寫入總表使用 ETag 條件寫入 (If-Match)，衝突時自動重讀重試，避免互相覆蓋
+// - R2 讀取失敗時「丟出錯誤」，絕不以空資料覆寫總表
 // ─────────────────────────────────────────────────────────
+
+// 讀取總表＋合併尚未進總表的獨立訂單檔；回傳 { orders, etag, merged }
+async function readOrdersState(r2Config) {
+  const map = new Map();
+  let etag = null;
+
+  const res = await r2Fetch(r2Config, "GET", "orders.json");
+  if (res.ok) {
+    etag = res.headers.get("etag");
+    const parsed = await res.json();
+    if (Array.isArray(parsed)) {
+      parsed.forEach(o => { const id = o && (o.orderId || o.id); if (id) map.set(id, o); });
+    }
+  } else if (res.status !== 404) {
+    throw new Error(`R2 GET orders.json 失敗: ${res.status}`);
+  }
+
+  let merged = false;
+  const singleKeys = await listR2Keys(r2Config, "orders/");
+  const missingKeys = singleKeys.filter(k => {
+    const m = k.match(/^orders\/(.+)\.json$/);
+    return m && !map.has(m[1]);
+  });
+  if (missingKeys.length > 0) {
+    const fetched = await Promise.all(missingKeys.map(async (k) => {
+      try {
+        const r = await r2Fetch(r2Config, "GET", k);
+        return r.ok ? await r.json() : null;
+      } catch { return null; }
+    }));
+    fetched.forEach(o => {
+      const id = o && (o.orderId || o.id);
+      if (id) { map.set(id, o); merged = true; }
+    });
+  }
+
+  const orders = Array.from(map.values())
+    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+  return { orders, etag, merged };
+}
+
 async function loadOrders(r2Config) {
   if (!r2Config) return memoryOrders;
-  try {
-    const map = new Map();
-
-    // 1. 先讀取總表 orders.json
-    try {
-      const res = await r2Fetch(r2Config, "GET", "orders.json");
-      if (res.ok) {
-        const parsed = await res.json();
-        if (Array.isArray(parsed)) {
-          parsed.forEach(o => { const id = o.orderId || o.id; if (id) map.set(id, o); });
-        }
-      }
-    } catch (e) {
-      console.warn("loadOrders 讀取 orders.json 警告:", e.message);
-    }
-
-    // 2. 檢查是否有個別 orders/*.json 尚未合併（高並發同時下單防競態覆蓋）
-    try {
-      const singleKeys = await listR2Keys(r2Config, "orders/");
-      const missingKeys = singleKeys.filter(k => {
-        const idMatch = k.match(/^orders\/(.+)\.json$/);
-        return idMatch && !map.has(idMatch[1]);
-      });
-
-      if (missingKeys.length > 0) {
-        const fetchedSingleOrders = await Promise.all(
-          missingKeys.map(async (k) => {
-            try {
-              const r = await r2Fetch(r2Config, "GET", k);
-              if (r.ok) return await r.json();
-            } catch (err) {
-              return null;
-            }
-          })
-        );
-        let newlyAdded = false;
-        fetchedSingleOrders.forEach(o => {
-          if (o && (o.orderId || o.id)) {
-            map.set(o.orderId || o.id, o);
-            newlyAdded = true;
-          }
-        });
-
-        // 若有新合併的單，自動更新回寫 orders.json 加速下一次讀取
-        if (newlyAdded) {
-          const mergedNow = Array.from(map.values()).sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
-          saveOrders(r2Config, mergedNow).catch(() => {});
-        }
-      }
-    } catch (e) {
-      console.warn("檢查 orders/ 備援警告:", e.message);
-    }
-
-    // 3. 合併記憶體備援
-    memoryOrders.forEach(o => { const id = o.orderId || o.id; if (id && !map.has(id)) map.set(id, o); });
-
-    const merged = Array.from(map.values()).sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
-    memoryOrders = merged;
-    return merged;
-  } catch (err) {
-    console.warn("loadOrders 讀取雲端異常 (使用記憶體備援):", err.message);
+  const { orders, merged } = await readOrdersState(r2Config);
+  memoryOrders = orders; // 僅作唯讀快取
+  if (merged) {
+    // 把獨立訂單檔合併回總表（條件寫入，失敗無妨，下次會再合併）
+    await mutateOrders(r2Config, list => list).catch(e => console.warn("合併總表略過:", e.message));
   }
-  return memoryOrders;
+  return orders;
 }
 
-async function saveOrders(r2Config, ordersList) {
-  // 1. 一律先更新伺服器記憶體，保證訂單絕對不遺失
-  memoryOrders = ordersList;
-  if (!r2Config) return;
-
-  // 2. 異步備份至雲端 R2，若連線失敗不卡死點餐主流程
-  try {
-    const res = await r2Fetch(r2Config, "PUT", "orders.json", ordersList);
-    if (!res.ok) {
-      console.warn("R2 PUT orders.json 雲端回應狀態:", res.status);
-    }
-  } catch (err) {
-    console.warn("R2 PUT orders.json 網路異常 (已安全保存於伺服器記憶體):", err.message);
+// 以「讀取 → 修改 → 條件寫入」方式安全更新總表；衝突 (412) 時重試
+async function mutateOrders(r2Config, mutator) {
+  if (!r2Config) {
+    memoryOrders = mutator([...memoryOrders]);
+    return memoryOrders;
   }
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const { orders, etag } = await readOrdersState(r2Config);
+    const next = mutator(orders);
+    const cond = etag ? { "If-Match": etag } : {};
+    const res = await r2Fetch(r2Config, "PUT", "orders.json", next, cond);
+    if (res.ok) { memoryOrders = next; return next; }
+    if (res.status === 412) { await sleep(80 + Math.random() * 220); continue; }
+    throw new Error(`R2 PUT orders.json 失敗: ${res.status}`);
+  }
+  throw new Error("訂單同時被多人修改，請稍後再試");
 }
 
+// 寫入獨立訂單檔；失敗會丟出錯誤
 async function saveSingleOrder(r2Config, order) {
   if (!r2Config) return;
-  try {
-    const orderId = order.orderId || order.id;
-    await r2Fetch(r2Config, "PUT", `orders/${orderId}.json`, order);
-  } catch (err) {
-    console.warn("saveSingleOrder 雲端備份通知:", err.message);
-  }
+  const orderId = order.orderId || order.id;
+  const res = await r2Fetch(r2Config, "PUT", `orders/${orderId}.json`, order);
+  if (!res.ok) throw new Error(`R2 PUT orders/${orderId}.json 失敗: ${res.status}`);
 }
 
 async function deleteSingleOrder(r2Config, orderId) {
@@ -386,8 +362,9 @@ export default async function handler(req, res) {
       });
     } catch (err) {
       console.error("GET 訂單失敗:", err);
-      return res.status(200).json({
-        success: true,
+      return res.status(503).json({
+        success: false,
+        message: "雲端訂單暫時無法讀取，請稍後重新整理",
         count: memoryOrders.length,
         orders: memoryOrders,
         storage: "memory-fallback"
@@ -395,88 +372,109 @@ export default async function handler(req, res) {
     }
   }
 
-  // ── POST: 顧客提交新訂單（高並發安全＋保證通知） ────────
+  // ── POST: 顧客提交新訂單 ────────────────────────────────
   if (req.method === "POST") {
-    try {
-      const data = req.body;
-      if (!data || !data.customerName || !data.items || data.items.length === 0) {
-        return res.status(400).json({ success: false, message: "請提供完整的顧客資訊與訂單項目" });
+    const data = req.body;
+    if (!data || !data.customerName || !Array.isArray(data.items) || data.items.length === 0) {
+      return res.status(400).json({ success: false, message: "請提供完整的顧客資訊與訂單項目" });
+    }
+
+    // 數量驗證：必須為 1 ~ MAX_QTY_PER_ITEM 的整數
+    for (const it of data.items) {
+      const q = Number(it.qty ?? it.quantity);
+      if (!Number.isInteger(q) || q < 1 || q > MAX_QTY_PER_ITEM) {
+        return res.status(400).json({ success: false, message: `餐點數量不正確（每項 1～${MAX_QTY_PER_ITEM} 份）` });
       }
+      it.qty = q;
+      it.quantity = q;
+    }
 
-      // 生成防碰撞唯一訂單編號
-      const now        = new Date();
-      const todayStr   = now.toISOString().slice(5, 10).replace("-", "");
-      const timeMs     = now.getTime().toString().slice(-4);
-      const randSuffix = Math.random().toString(36).substring(2, 5).toUpperCase();
-      const generatedId = `YG-${todayStr}-${timeMs}${randSuffix}`;
-
-      // 以雲端菜單核對品項與價格（防止前端竄改價格）；菜單讀取失敗時不阻擋點餐
-      if (r2Config) {
-        try {
-          const mr = await r2Fetch(r2Config, "GET", "menu.json");
-          if (mr.ok) {
-            const menu = await mr.json();
-            if (Array.isArray(menu) && menu.length > 0) {
-              const byId = new Map(menu.map(m => [m.id, m]));
-              for (const it of data.items) {
-                const m = byId.get(it.id);
-                if (!m) {
-                  return res.status(400).json({ success: false, message: `餐點「${it.name || it.id}」已下架或不存在，請重新整理頁面` });
-                }
-                it.price = Number(m.price) || 0;
-                it.name = m.name || it.name;
-              }
-            }
-          }
-        } catch (e) {
-          console.warn("菜單價格核對略過:", e.message);
-        }
-      }
-
-      const newOrder = normalizeOrder(data, generatedId);
-
-      // 1. 同步寫入個別雲端備份（每個訂單獨立檔案，完全原子操作，高並發 100% 零覆蓋零碰撞）
-      await saveSingleOrder(r2Config, newOrder);
-
-      // 2. 讀取總表 → Map 合併 → 寫回
-      const currentOrders = await loadOrders(r2Config);
-      const orderMap = new Map();
-      orderMap.set(newOrder.orderId, newOrder);
-      currentOrders.forEach(o => {
-        const id = o.orderId || o.id;
-        if (id && !orderMap.has(id)) orderMap.set(id, o);
-      });
-      const mergedOrders = Array.from(orderMap.values())
-        .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
-
-      await saveOrders(r2Config, mergedOrders);
-
-      // 3. 發送 Telegram 通知給店家（await 確保 Vercel 容器釋放前完成發送）
-      await sendTelegramNotification(newOrder);
-
-      return res.status(201).json({
-        success: true,
-        message: "訂單建立成功！已同步至後台與 Telegram",
-        order: newOrder,
-        storage: isR2Active ? "cloudflare-r2" : "memory-fallback"
-      });
-    } catch (err) {
-      console.error("POST 訂單非預期錯誤:", err);
-      // 即使遭遇例外，仍嘗試保底存入記憶體與發送 TG
+    // 以雲端菜單核對品項、價格、是否售完（防止前端竄改）；菜單讀取失敗時不阻擋點餐
+    let menuById = null;
+    if (r2Config) {
       try {
-        const fallbackOrder = normalizeOrder(req.body, `YG-${Date.now().toString().slice(-4)}`);
-        memoryOrders.unshift(fallbackOrder);
-        await sendTelegramNotification(fallbackOrder);
-        return res.status(201).json({
-          success: true,
-          message: "訂單已建立（保底機制生效）",
-          order: fallbackOrder,
-          storage: "memory-fallback"
-        });
-      } catch (innerErr) {
-        return res.status(500).json({ success: false, message: "儲存訂單失敗", error: err.message });
+        const mr = await r2Fetch(r2Config, "GET", "menu.json");
+        if (mr.ok) {
+          const menu = await mr.json();
+          if (Array.isArray(menu) && menu.length > 0) menuById = new Map(menu.map(m => [m.id, m]));
+        }
+      } catch (e) {
+        console.warn("菜單價格核對略過:", e.message);
       }
     }
+    if (menuById) {
+      for (const it of data.items) {
+        const m = menuById.get(it.id);
+        if (!m) {
+          return res.status(400).json({ success: false, message: `餐點「${it.name || it.id}」已下架或不存在，請重新整理頁面` });
+        }
+        if (m.available === false) {
+          return res.status(400).json({ success: false, message: `餐點「${m.name}」今日已售完，請重新整理頁面` });
+        }
+        it.price = Number(m.price) || 0;
+        it.name = m.name || it.name;
+        it.category = m.category;
+      }
+    }
+
+    // 伺服器端重新計算折扣（不信任前端傳來的 discountAmount）
+    const subtotal = data.items.reduce((s, it) => s + (Number(it.price) || 0) * it.qty, 0);
+    let discountType = String(data.discountType ?? "");
+    if (!discountType) {
+      // 相容舊版前端：從優惠名稱推斷
+      const code = String(data.discountCode || data.couponApplied || "");
+      if (code.includes("20 元") || code.includes("20元")) discountType = "20";
+      else if (code.includes("免費")) discountType = "item";
+      else discountType = "0";
+    }
+    let discountAmount = 0;
+    if (discountType === "20") {
+      discountAmount = 20;
+    } else if (discountType === "item") {
+      const bowls = data.items.filter(it => menuById ? it.category === "bowls" : true);
+      const maxBowl = bowls.reduce((mx, it) => Math.max(mx, Number(it.price) || 0), 0);
+      discountAmount = Math.min(maxBowl, MAX_ITEM_DISCOUNT);
+    }
+    data.discountAmount = Math.min(discountAmount, subtotal);
+    data.items.forEach(it => { delete it.category; });
+
+    // 生成防碰撞唯一訂單編號（台灣日期）
+    const now        = new Date();
+    const timeMs     = now.getTime().toString().slice(-4);
+    const randSuffix = Math.random().toString(36).substring(2, 5).toUpperCase();
+    const generatedId = `YG-${taiwanMMDD(now)}-${timeMs}${randSuffix}`;
+    const newOrder = normalizeOrder(data, generatedId);
+
+    // 1. 寫入獨立訂單檔（必須成功，否則回報失敗，不假裝成功）
+    try {
+      if (r2Config) await saveSingleOrder(r2Config, newOrder);
+      else memoryOrders = [newOrder, ...memoryOrders];
+    } catch (err) {
+      console.error("POST 訂單儲存失敗:", err);
+      return res.status(503).json({ success: false, message: "訂單暫時無法儲存，請稍後再試或直接透過 LINE 訂購" });
+    }
+
+    // 2. 合併進總表（失敗無妨：獨立檔已存在，下次讀取時會自動合併）
+    if (r2Config) {
+      try {
+        await mutateOrders(r2Config, list => {
+          if (!list.some(o => (o.orderId || o.id) === newOrder.orderId)) list.unshift(newOrder);
+          return list;
+        });
+      } catch (err) {
+        console.warn("合併總表失敗（獨立檔已保存）:", err.message);
+      }
+    }
+
+    // 3. Telegram 通知（await 確保 Vercel 容器釋放前完成發送）
+    await sendTelegramNotification(newOrder);
+
+    return res.status(201).json({
+      success: true,
+      message: "訂單建立成功！已同步至後台與 Telegram",
+      order: newOrder,
+      storage: isR2Active ? "cloudflare-r2" : "memory-fallback"
+    });
   }
 
   // ── PUT / PATCH: 更新訂單狀態 ────────────────────────────
@@ -487,27 +485,30 @@ export default async function handler(req, res) {
       if (!targetId) return res.status(400).json({ success: false, message: "缺少訂單編號" });
 
       const VALID_STATUSES = ['new', 'preparing', 'ready', 'completed', 'cancelled'];
-      if (status && !VALID_STATUSES.includes(status)) {
+      if (!status) return res.status(400).json({ success: false, message: '缺少訂單狀態' });
+      if (!VALID_STATUSES.includes(status)) {
         return res.status(400).json({ success: false, message: `無效的狀態值：${status}` });
       }
-      if (!status) {
-        return res.status(400).json({ success: false, message: '缺少訂單狀態' });
-      }
 
-      const orders = await loadOrders(r2Config);
-      const orderIndex = orders.findIndex(o => o.orderId === targetId || o.id === targetId);
-      if (orderIndex === -1) return res.status(404).json({ success: false, message: `找不到訂單 #${targetId}` });
+      let updated = null;
+      await mutateOrders(r2Config, list => {
+        updated = null;
+        const o = list.find(x => x.orderId === targetId || x.id === targetId);
+        if (o) {
+          o.status = status;
+          o.updatedAt = new Date().toISOString();
+          updated = o;
+        }
+        return list;
+      });
+      if (!updated) return res.status(404).json({ success: false, message: `找不到訂單 #${targetId}` });
 
-      orders[orderIndex].status    = status;
-      orders[orderIndex].updatedAt = new Date().toISOString();
-
-      await saveOrders(r2Config, orders);
-      await saveSingleOrder(r2Config, orders[orderIndex]);
+      try { await saveSingleOrder(r2Config, updated); } catch (e) { console.warn(e.message); }
 
       return res.status(200).json({
         success: true,
         message: `訂單 #${targetId} 狀態已更新為：${status}`,
-        order: orders[orderIndex],
+        order: updated,
         storage: isR2Active ? "cloudflare-r2" : "memory-fallback"
       });
     } catch (err) {
@@ -525,9 +526,14 @@ export default async function handler(req, res) {
         parsedUrl.searchParams.get("orderId") || req.body?.orderId || req.body?.id;
 
       if (isClearAll) {
-        await saveOrders(r2Config, []);
-        const singleKeys = await listR2Keys(r2Config, "orders/");
-        await Promise.all(singleKeys.map(k => r2Fetch(r2Config, "DELETE", k).catch(() => {})));
+        // 先刪獨立檔，再清總表，避免被讀取時合併回來
+        if (r2Config) {
+          const singleKeys = await listR2Keys(r2Config, "orders/");
+          await Promise.all(singleKeys.map(k => r2Fetch(r2Config, "DELETE", k).catch(() => {})));
+          const r = await r2Fetch(r2Config, "PUT", "orders.json", []);
+          if (!r.ok) throw new Error(`R2 PUT orders.json 失敗: ${r.status}`);
+        }
+        memoryOrders = [];
         return res.status(200).json({
           success: true, message: "已成功清空所有訂單",
           storage: isR2Active ? "cloudflare-r2" : "memory-fallback"
@@ -536,11 +542,9 @@ export default async function handler(req, res) {
 
       if (!targetId) return res.status(400).json({ success: false, message: "缺少欲刪除的訂單編號" });
 
-      const orders   = await loadOrders(r2Config);
-      const filtered = orders.filter(o => o.orderId !== targetId && o.id !== targetId);
-
-      await saveOrders(r2Config, filtered);
+      // 先刪獨立檔，再從總表移除
       await deleteSingleOrder(r2Config, targetId);
+      await mutateOrders(r2Config, list => list.filter(o => o.orderId !== targetId && o.id !== targetId));
 
       return res.status(200).json({
         success: true, message: `訂單 #${targetId} 已成功刪除`,

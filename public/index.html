@@ -735,6 +735,7 @@
         paymentMethod: payment,
         needBag,
         discountCode: discountName,
+        discountType: discountSelect.value,
         discountAmount,
         items: orderItems,
         subtotal,
@@ -752,6 +753,11 @@
           body: JSON.stringify(orderPayload)
         });
         apiSuccess = apiRes.ok;
+        if (apiRes.status === 400) {
+          const errData = await apiRes.json().catch(() => ({}));
+          alert(errData.message || '訂單內容有誤，請重新整理頁面後再試');
+          return;
+        }
         if (apiRes.ok) {
           const resData = await apiRes.json();
           if (resData && resData.order) {
