@@ -150,7 +150,7 @@ async function readOrdersState(r2Config) {
 
   const res = await r2Fetch(r2Config, "GET", "orders.json");
   if (res.ok) {
-    etag = res.headers.get("etag");
+    etag = (res.headers.get("etag") || "").replace(/^W\//, "") || null;
     const parsed = await res.json();
     if (Array.isArray(parsed)) {
       parsed.forEach(o => { const id = o && (o.orderId || o.id); if (id) map.set(id, o); });
